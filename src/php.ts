@@ -6,9 +6,11 @@ import fs from 'fs'
 const phpClasses: Map<string, PHPClass> = new Map();
 
 const query_string = `
-  (namespace_definition (namespace_name) @namespace)
-  (class_declaration (name) @class)
-  ((method_declaration (visibility_modifier) @_vis (name) @name) (#eq? @_vis "public"))
+  (namespace_definition (namespace_name) @namespace) ; pattern: 0
+  (class_declaration (name) @class)                  ; pattern: 1
+  (interface_declaration (name) @class)              ; pattern: 2
+  ((method_declaration (visibility_modifier)
+    @_vis (name) @name) (#eq? @_vis "public"))       ; pattern: 3
 `;
 
 const parser = new Parser();
@@ -87,10 +89,10 @@ export function collectPhpClasses(dir: string) {
                 if (match.pattern == 0) {
                   ns = match.captures[0].node
                 }
-                if (match.pattern == 1) {
+                if (match.pattern == 1 || match.pattern == 2) {
                   cls = match.captures[0].node
                 }
-                if (match.pattern == 2) {
+                if (match.pattern == 3) {
                   methods.push(match.captures[1].node)
                 }
               });
