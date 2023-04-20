@@ -12,5 +12,13 @@
   },
   "devDependencies": {
     "@types/node": "^18.15.11"
+  },
+  "scripts": {
+    "dev": "npm run-script build && npm link",
+    "watch": "tsc --watch",
+    "build": "tsc"
+  },
+  "bin": {
+    "magento2-ls": "./out/server.js"
   }
 }
