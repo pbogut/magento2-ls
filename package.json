@@ -1,5 +1,5 @@
 {
-  "name": "magento2-lsp",
+  "name": "magento2-ls",
   "type": "module",
   "version": "0.0.1",
   "dependencies": {
