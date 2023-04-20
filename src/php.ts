@@ -1,7 +1,7 @@
 import Parser from 'tree-sitter';
 import Php from 'tree-sitter-php';
 import { glob } from 'glob';
-import fs from 'fs'
+import fs from 'fs';
 
 const phpClasses: Map<string, PHPClass> = new Map();
 
@@ -36,22 +36,22 @@ export class PHPClass {
   }
 }
 
-const trimLength = 'registration.php'.length
+const trimLength = 'registration.php'.length;
 
 export function getLocation(fqn: string, method: string | null = null) {
-  let phpClass = phpClasses.get(fqn)
+  let phpClass = phpClasses.get(fqn);
 
   if (phpClass == null) {
     return null;
   }
 
-  let node = phpClass.cls
+  let node = phpClass.cls;
   if (method != null) {
     phpClass.methods.forEach((m) => {
       if (m.text == method) {
-        node = m
+        node = m;
       }
-    })
+    });
   }
 
   return {
@@ -64,41 +64,41 @@ export function getLocation(fqn: string, method: string | null = null) {
       line: node.endPosition.row,
       character: node.endPosition.column
     }
-  }
+  };
 }
 
 export function collectPhpClasses(dir: string) {
-  dir = dir.endsWith('/') ? dir : dir + '/'
+  dir = dir.endsWith('/') ? dir : dir + '/';
   glob(dir + '**/registration.php').then((modules) => {
     modules.forEach((module) => {
       glob(module.slice(0, -trimLength) + '**/*.php').then((files) => {
         files.forEach((file) => {
           if (file.endsWith('Test.php')) {
-            return
+            return;
           }
           if (fs.statSync(file).isFile()) {
             let tree = parser.parse(fs.readFileSync(file, 'utf8'));
             // console.log(tree.rootNode.toString())
             let matches = query.matches(tree.rootNode);
             if (matches.length > 1) {
-              let ns = null
-              let cls = null
-              let methods: Parser.SyntaxNode[] = []
+              let ns = null;
+              let cls = null;
+              let methods: Parser.SyntaxNode[] = [];
 
               matches.forEach((match) => {
                 if (match.pattern == 0) {
-                  ns = match.captures[0].node
+                  ns = match.captures[0].node;
                 }
                 if (match.pattern == 1 || match.pattern == 2) {
-                  cls = match.captures[0].node
+                  cls = match.captures[0].node;
                 }
                 if (match.pattern == 3) {
-                  methods.push(match.captures[1].node)
+                  methods.push(match.captures[1].node);
                 }
               });
 
               if (!ns || !cls) {
-                return
+                return;
               }
 
               let php = new PHPClass(
@@ -106,12 +106,12 @@ export function collectPhpClasses(dir: string) {
                 cls,
                 methods,
                 file
-              )
-              phpClasses.set(php.fqn, php)
+              );
+              phpClasses.set(php.fqn, php);
             }
           }
-        })
-      })
-    })
+        });
+      });
+    });
   });
 }
