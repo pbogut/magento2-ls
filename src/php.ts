@@ -36,6 +36,35 @@ export class PHPClass {
 
 const trimLength = 'registration.php'.length
 
+export function getLocation(fqn: string, method: string | null = null) {
+  let phpClass = phpClasses.get(fqn)
+
+  if (phpClass == null) {
+    return null;
+  }
+
+  let node = phpClass.cls
+  if (method != null) {
+    phpClass.methods.forEach((m) => {
+      if (m.text == method) {
+        node = m
+      }
+    })
+  }
+
+  return {
+    file: phpClass.file,
+    start: {
+      line: node.startPosition.row,
+      character: node.startPosition.column
+    },
+    end: {
+      line: node.endPosition.row,
+      character: node.endPosition.column
+    }
+  }
+}
+
 export function collectPhpClasses(dir: string) {
   dir = dir.endsWith('/') ? dir : dir + '/'
   glob(dir + '**/registration.php').then((modules) => {
