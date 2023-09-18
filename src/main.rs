@@ -1,5 +1,6 @@
 mod php;
 mod ts;
+mod xml;
 
 use php::*;
 use std::collections::HashMap;
@@ -9,13 +10,13 @@ use std::path::PathBuf;
 use lsp_types::{
     request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
 };
-use lsp_types::{GotoDefinitionParams, Location, OneOf, Url};
+use lsp_types::{GotoDefinitionParams, Location, OneOf};
 
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Note that  we must have our logging only write out to stderr.
-    eprintln!("starting generic LSP server");
+    eprintln!("Starting magento2-ls LSP server");
 
     // Create the transport. Includes the stdio (stdin and stdout) versions but this could
     // also be implemented to use sockets or HTTP.
@@ -28,6 +29,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     })
     .unwrap();
     let initialization_params = connection.initialize(server_capabilities)?;
+
     main_loop(connection, initialization_params)?;
     io_threads.join()?;
 
@@ -61,20 +63,10 @@ fn main_loop(
                 match cast::<GotoDefinition>(req) {
                     Ok((id, params)) => {
                         eprintln!("got gotoDefinition request #{id}: {params:?}");
-                        let loc = Location {
-                            uri: Url::from_file_path("/tmp/foo.rs").unwrap(),
-                            range: Range {
-                                start: Position {
-                                    line: 0,
-                                    character: 0,
-                                },
-                                end: Position {
-                                    line: 0,
-                                    character: 0,
-                                },
-                            },
+                        let result = match get_location_from_params(&map, params) {
+                            Some(loc) => Some(GotoDefinitionResponse::Array(vec![loc])),
+                            None => Some(GotoDefinitionResponse::Array(vec![])),
                         };
-                        let result = Some(GotoDefinitionResponse::Array(vec![loc]));
                         let result = serde_json::to_value(&result).unwrap();
                         let resp = Response {
                             id,
@@ -98,6 +90,16 @@ fn main_loop(
         }
     }
     Ok(())
+}
+
+fn get_location_from_params(
+    map: &HashMap<String, PHPClass>,
+    params: GotoDefinitionParams,
+) -> Option<Location> {
+    let uri = params.text_document_position_params.text_document.uri;
+    let pos = params.text_document_position_params.position;
+
+    xml::get_location_from_position(map, uri, pos)
 }
 
 fn cast<R>(req: Request) -> Result<(RequestId, R::Params), ExtractError<Request>>
