@@ -11,7 +11,7 @@ pub struct PHPClass {
     pub fqn: String,
     pub uri: Url,
     pub range: Range,
-    pub methods: Vec<PHPMethod>,
+    pub methods: HashMap<String, PHPMethod>,
 }
 
 #[derive(Debug)]
@@ -97,7 +97,7 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
 
     let mut ns: Option<Node> = None;
     let mut cls: Option<Node> = None;
-    let mut methods: Vec<PHPMethod> = vec![];
+    let mut methods: HashMap<String, PHPMethod> = HashMap::new();
 
     for m in matches {
         if m.pattern_index == 0 {
@@ -110,10 +110,13 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
             let method_node = m.captures[1].node;
             let method_name = method_node.utf8_text(&content.as_bytes()).unwrap_or("");
             if method_name != "" {
-                methods.push(PHPMethod {
-                    name: method_name.to_string(),
-                    range: get_range_from_node(method_node),
-                });
+                methods.insert(
+                    method_name.to_string(),
+                    PHPMethod {
+                        name: method_name.to_string(),
+                        range: get_range_from_node(method_node),
+                    },
+                );
             }
         }
     }
