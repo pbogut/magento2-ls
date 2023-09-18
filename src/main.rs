@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use lsp_types::{
     request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
 };
-use lsp_types::{GotoDefinitionParams, Location, OneOf};
+use lsp_types::{GotoDefinitionParams, Location, OneOf, Url};
 
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
 
@@ -38,9 +38,17 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
 
 fn main_loop(
     connection: Connection,
-    params: serde_json::Value,
+    init_params: serde_json::Value,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
-    let _params: InitializeParams = serde_json::from_value(params).unwrap();
+    let params: InitializeParams = serde_json::from_value(init_params).unwrap();
+
+    eprintln!("starting indexer");
+    let mut map: HashMap<String, PHPClass> = HashMap::new();
+    // TODO make it in parallel or in separate thread
+    params.root_uri.map(|uri| {
+        parse_php_files(&mut map, PathBuf::from(uri.path()));
+    });
+
     eprintln!("starting example main loop");
     for msg in &connection.receiver {
         eprintln!("got msg: {msg:?}");

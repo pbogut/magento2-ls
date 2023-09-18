@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
+use glob::glob;
 use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
@@ -17,6 +18,61 @@ pub struct PHPClass {
 pub struct PHPMethod {
     pub name: String,
     pub range: Range,
+}
+
+pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, path: PathBuf) {
+    let path_str = path.to_str().expect("Correct path is required").to_string();
+    let tmp_modules =
+        glob((path_str + "/**/registration.php").as_str()).expect("Failed to read glob pattern");
+
+    let mut progress_max = 0;
+    let mut modules = vec![];
+    for module in tmp_modules {
+        progress_max += 1;
+        modules.push(module);
+    }
+    let mut progress_cur = 0;
+    for module in modules {
+        progress_cur += 1;
+        eprintln!("Index Progress: {}/{}", progress_cur, progress_max);
+        match module {
+            Ok(path) => {
+                let path_str = path.to_str().expect("path error");
+                let files = glob(
+                    (path_str[..path_str.len() - "/registration.php".len()].to_string()
+                        + "/**/*.php")
+                        .as_str(),
+                )
+                .expect("Failed to read glob pattern");
+                for file in files {
+                    match file {
+                        Ok(path) => {
+                            if path.to_str().unwrap_or("").ends_with("Test.php") {
+                                continue;
+                            }
+                            if path.to_str().unwrap_or("").contains("/dev/tests/") {
+                                continue;
+                            }
+                            // TODO get from settings or somethign
+                            if path.to_str().unwrap_or("").contains("/vendor/") {
+                                continue;
+                            }
+                            if path.is_file() {
+                                match parse_php_file(path) {
+                                    Some(cls) => {
+                                        map.insert(cls.fqn.clone(), cls);
+                                    }
+                                    None => {}
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("{:?}", e),
+                    }
+                }
+            }
+            Err(e) => eprintln!("{:?}", e),
+        }
+    }
 }
 
 pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
