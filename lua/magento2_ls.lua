@@ -9,6 +9,14 @@ end
 
 local clientId = nil
 
+local function start_lsp(opts)
+  if clientId ~= nil then
+    vim.lsp.buf_attach_client(0, clientId)
+  else
+    clientId = vim.lsp.start(opts)
+  end
+end
+
 M.setup = function(opts)
   opts = opts or {}
   opts = vim.tbl_deep_extend('keep', opts, {
@@ -18,6 +26,12 @@ M.setup = function(opts)
     root_dir = vim.fn.getcwd(),
   })
 
+  for _, ft in ipairs(opts.filetypes) do
+    if ft == vim.o.filetype then
+      start_lsp(opts)
+    end
+  end
+
   local augroup = vim.api.nvim_create_augroup('magento2_ls', { clear = true })
   local pattern = table.concat(opts.filetypes, ',')
 
@@ -25,11 +39,7 @@ M.setup = function(opts)
     group = augroup,
     pattern = pattern,
     callback = function()
-      if clientId ~= nil then
-        vim.lsp.buf_attach_client(0, clientId)
-      else
-        clientId = vim.lsp.start(opts)
-      end
+      start_lsp(opts)
     end,
   })
 end
