@@ -4,7 +4,7 @@
 
 The Magento 2 Language Server is a tool that acts as a bridge between Magento 2 XML and PHP files. It provides features such as jumping to the definition of PHP classes from XML definitions of plugins, observers, jobs, and similar entities. The goal is to also provide code completion suggestions in XML files when referencing PHP classes and functions, and potentially finding references of PHP classes/methods in XML in the future.
 
-Please note that the current version of the language server is considered to be of alpha quality. While it works and can be used, it may have limited functionality and can be memory-intensive.
+Please note that the current version of the language server is considered to be of alpha quality. While it works and can be used, it has limited functionality and things can break.
 
 ## Features
  - Jump to definition of PHP classes from XML definitions of plugins, observers, jobs, and similar entities.
@@ -21,7 +21,7 @@ Add the following lines to your init.lua file if you are using Packer as your pl
 
 ```lua
 use({ 'pbogut/magento2-ls', 
-  run = 'npm install && npm run build',
+  run = 'cargo build --release',
   config = "require'magento2_ls'.setup()" 
 })
 ```
