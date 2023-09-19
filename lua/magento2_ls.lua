@@ -14,7 +14,7 @@ M.setup = function(opts)
   opts = vim.tbl_deep_extend('keep', opts, {
     filetypes = { 'xml' },
     name = 'magento2-ls',
-    cmd = { 'node', script_path('../out/server.js'), '--stdio' },
+    cmd = { script_path('../target/release/magento2-ls') },
     root_dir = vim.fn.getcwd(),
   })
 
@@ -35,7 +35,7 @@ M.setup = function(opts)
 end
 
 M.build = function()
-  local cmd = 'cd ' .. vim.fn.shellescape(script_path('..')) .. ' && npm install && npm run build'
+  local cmd = 'cd ' .. vim.fn.shellescape(script_path('..')) .. ' && cargo build --release'
   vim.fn.jobstart(cmd, {
     on_exit = function(_, code)
       if code == 0 then
