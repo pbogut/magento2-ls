@@ -2,11 +2,14 @@ use std::{collections::HashMap, path::PathBuf};
 
 use glob::glob;
 use lsp_types::{Position, Range, Url};
+use serde::{Deserialize, Serialize};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::ts::get_range_from_node;
 
-#[derive(Debug)]
+const CACHE_FILE: &str = ".magento2-ls.index";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PHPClass {
     pub fqn: String,
     pub uri: Url,
@@ -14,14 +17,20 @@ pub struct PHPClass {
     pub methods: HashMap<String, PHPMethod>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PHPMethod {
     pub name: String,
     pub range: Range,
 }
 
-pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, path: PathBuf) {
-    let path_str = path.to_str().expect("Correct path is required").to_string();
+pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, root_path: PathBuf) {
+    let vendor_map = load_vendor(&root_path);
+
+    let path_str = root_path
+        .to_str()
+        .expect("Correct path is required")
+        .to_string();
+
     let tmp_modules =
         glob((path_str + "/**/registration.php").as_str()).expect("Failed to read glob pattern");
 
@@ -47,17 +56,23 @@ pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, path: PathBuf) {
                 for file in files {
                     match file {
                         Ok(path) => {
-                            if path.to_str().unwrap_or("").ends_with("Test.php") {
+                            let path_str = path.to_str().unwrap_or("");
+                            if path_str.ends_with("Test.php") {
                                 continue;
                             }
-                            if path.to_str().unwrap_or("").contains("/dev/tests/") {
+                            if path_str.contains("/dev/tests/") {
                                 continue;
                             }
-                            // TODO get from settings or somethign
-                            if path.to_str().unwrap_or("").contains("/vendor/") {
-                                continue;
+                            if path_str.contains("/vendor/") {
+                                if let Some(cls) = vendor_map.get(path_str) {
+                                    map.insert(cls.fqn.clone(), cls.clone());
+                                    continue;
+                                }
                             }
                             if path.is_file() {
+                                if false {
+                                    continue;
+                                }
                                 match parse_php_file(path) {
                                     Some(cls) => {
                                         map.insert(cls.fqn.clone(), cls);
@@ -72,6 +87,41 @@ pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, path: PathBuf) {
             }
             Err(e) => eprintln!("{:?}", e),
         }
+    }
+    save_vendor(root_path, map);
+}
+
+fn load_vendor(root_path: &PathBuf) -> HashMap<String, PHPClass> {
+    let root_string = root_path
+        .to_str()
+        .expect("root path is required")
+        .to_string();
+    std::fs::File::open(root_string.clone() + "/" + CACHE_FILE).map_or(HashMap::new(), |f| {
+        let reader = std::io::BufReader::new(f);
+        bincode::deserialize_from(reader).unwrap_or(HashMap::new())
+    })
+}
+
+fn save_vendor(root_path: PathBuf, map: &HashMap<String, PHPClass>) {
+    let root_string = root_path
+        .to_str()
+        .expect("root path is required")
+        .to_string();
+    if let Ok(f) = std::fs::File::create(root_string.clone() + "/" + CACHE_FILE) {
+        let mut vendor_map: HashMap<String, PHPClass> = HashMap::new();
+
+        for (_, value) in map {
+            if value
+                .uri
+                .path()
+                .starts_with((root_string.clone() + "/vendor/").as_str())
+            {
+                vendor_map.insert(value.uri.path().to_string(), value.clone());
+            }
+        }
+        bincode::serialize_into(f, &vendor_map)
+            .map_err(|e| eprintln!("Failed to write index file: {:?}", e))
+            .expect("Failed to write index file");
     }
 }
 
