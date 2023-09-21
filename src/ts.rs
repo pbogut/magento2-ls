@@ -15,7 +15,10 @@ pub fn get_range_from_node(node: Node) -> Range {
 }
 
 pub fn get_node_text(node: Node, content: &str) -> String {
-    node.utf8_text(content.as_bytes()).unwrap_or("").to_string()
+    node.utf8_text(content.as_bytes())
+        .unwrap_or("")
+        .trim_matches('\\')
+        .to_string()
 }
 
 pub fn node_at_position(node: Node, pos: Position) -> bool {
