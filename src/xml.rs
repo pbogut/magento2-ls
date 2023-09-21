@@ -1,9 +1,11 @@
-use crate::php::M2Item;
-use crate::ts::*;
+use crate::{
+    php::M2Item,
+    ts::{get_node_text, node_at_position},
+};
 use lsp_types::{Position, Url};
 use tree_sitter::{Query, QueryCursor};
 
-pub fn get_item_from_position(uri: Url, pos: Position) -> Option<M2Item> {
+pub fn get_item_from_position(uri: &Url, pos: Position) -> Option<M2Item> {
     let path = uri.path();
 
     let query_string = "
@@ -36,12 +38,12 @@ pub fn get_item_from_position(uri: Url, pos: Position) -> Option<M2Item> {
           ) @callable
     ";
 
-    let content = std::fs::read_to_string(&path).expect("Should have been able to read the file");
+    let content = std::fs::read_to_string(path).expect("Should have been able to read the file");
 
     let tree = tree_sitter_parsers::parse(&content, "html");
-    let query = Query::new(tree.language(), &query_string)
+    let query = Query::new(tree.language(), query_string)
         .map_err(|e| eprintln!("Error creating query: {:?}", e))
-        .unwrap();
+        .expect("Error creating query");
 
     let mut cursor = QueryCursor::new();
     let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
@@ -61,8 +63,7 @@ pub fn get_item_from_position(uri: Url, pos: Position) -> Option<M2Item> {
                     if child.kind() == "attribute" {
                         let attr_name = child
                             .named_child(0)
-                            .map(|attr| get_node_text(attr, &content))
-                            .unwrap_or("".to_string());
+                            .map_or_else(String::new, |attr| get_node_text(attr, &content));
                         if attr_name == "class" || attr_name == "instance" {
                             class_name = Some(get_node_text(
                                 child.named_child(1)?.named_child(0)?,

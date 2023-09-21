@@ -1,8 +1,11 @@
-use crate::ts::get_range_from_node;
+use crate::ts::{get_node_text, get_range_from_node};
 use convert_case::{Case, Casing};
 use glob::glob;
 use lsp_types::{Position, Range, Url};
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tree_sitter::{Node, Query, QueryCursor};
 
 #[derive(Debug, Clone)]
@@ -16,13 +19,6 @@ pub enum M2Item {
     Class(String),
     Method(String, String),
     Const(String, String),
-}
-
-#[derive(Debug, Clone)]
-enum M2Module {
-    Theme(String),
-    Module(String),
-    Library(String),
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +40,13 @@ pub struct PHPMethod {
 pub struct PHPConst {
     pub name: String,
     pub range: Range,
+}
+
+#[derive(Debug, Clone)]
+enum M2Module {
+    Theme(String),
+    Module(String),
+    Library(String),
 }
 
 fn register_param_to_module(param: &str) -> Option<M2Module> {
@@ -78,10 +81,15 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn get_modules_map(root_path: &PathBuf) -> HashMap<String, PathBuf> {
+pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
     let mut map: HashMap<String, PathBuf> = HashMap::new();
-    let modules = glob(root_path.join("**/registration.php").to_str().unwrap())
-        .expect("Failed to read glob pattern");
+    let modules = glob(
+        root_path
+            .join("**/registration.php")
+            .to_str()
+            .expect("Path should be in valid encoding"),
+    )
+    .expect("Failed to read glob pattern");
 
     let module_name_query = "
     (scoped_call_expression
@@ -99,13 +107,13 @@ pub fn get_modules_map(root_path: &PathBuf) -> HashMap<String, PathBuf> {
                     .expect("Should have been able to read the file");
 
                 let tree = tree_sitter_parsers::parse(&content, "php");
-                Query::new(tree.language(), &module_name_query).map_or_else(
+                Query::new(tree.language(), module_name_query).map_or_else(
                     |e| eprintln!("Error creating query: {:?}", e),
                     |query| {
                         let mut cursor = QueryCursor::new();
                         let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
                         for m in matches {
-                            let mod_name = crate::ts::get_node_text(m.captures[1].node, &content);
+                            let mod_name = get_node_text(m.captures[1].node, &content);
                             let mod_name = mod_name.trim_matches('"').trim_matches('\'');
 
                             let mut parent = file_path.clone();
@@ -130,7 +138,7 @@ pub fn get_modules_map(root_path: &PathBuf) -> HashMap<String, PathBuf> {
     map
 }
 
-pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
+pub fn parse_php_file(file_path: &PathBuf) -> Option<PHPClass> {
     let query_string = "
       (namespace_definition (namespace_name) @namespace) ; pattern: 0
       (class_declaration (name) @class)                  ; pattern: 1
@@ -141,12 +149,12 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
     ";
 
     let content =
-        std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
+        std::fs::read_to_string(file_path).expect("Should have been able to read the file");
 
     let tree = tree_sitter_parsers::parse(&content, "php");
-    let query = Query::new(tree.language(), &query_string)
+    let query = Query::new(tree.language(), query_string)
         .map_err(|e| eprintln!("Error creating query: {:?}", e))
-        .unwrap();
+        .expect("Error creating query");
 
     let mut cursor = QueryCursor::new();
     let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
@@ -165,8 +173,8 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
         }
         if m.pattern_index == 3 {
             let method_node = m.captures[1].node;
-            let method_name = method_node.utf8_text(&content.as_bytes()).unwrap_or("");
-            if method_name != "" {
+            let method_name = method_node.utf8_text(content.as_bytes()).unwrap_or("");
+            if !method_name.is_empty() {
                 methods.insert(
                     method_name.to_string(),
                     PHPMethod {
@@ -178,8 +186,8 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
         }
         if m.pattern_index == 4 {
             let const_node = m.captures[0].node;
-            let const_name = const_node.utf8_text(&content.as_bytes()).unwrap_or("");
-            if const_name != "" {
+            let const_name = const_node.utf8_text(content.as_bytes()).unwrap_or("");
+            if !const_name.is_empty() {
                 constants.insert(
                     const_name.to_string(),
                     PHPConst {
@@ -197,15 +205,15 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
 
     let ns_node = ns.expect("ns is some");
     let cls_node = cls.expect("cls is some");
-    let ns_text = ns_node.utf8_text(&content.as_bytes()).unwrap_or("");
-    let cls_text = cls_node.utf8_text(&content.as_bytes()).unwrap_or("");
+    let ns_text = ns_node.utf8_text(content.as_bytes()).unwrap_or("");
+    let cls_text = cls_node.utf8_text(content.as_bytes()).unwrap_or("");
 
     let fqn = ns_text.to_string() + "\\" + cls_text;
     if fqn == "\\" {
         return None;
     }
 
-    let uri = Url::from_file_path(file_path.clone()).unwrap();
+    let uri = Url::from_file_path(file_path.clone()).expect("Path can not be converted to Url");
     let range = Range {
         start: Position {
             line: cls_node.start_position().row as u32,
@@ -217,11 +225,11 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
         },
     };
 
-    return Some(PHPClass {
+    Some(PHPClass {
         fqn,
         uri,
         range,
         methods,
         constants,
-    });
+    })
 }
