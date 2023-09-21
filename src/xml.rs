@@ -1,16 +1,9 @@
-use std::collections::HashMap;
-
+use crate::php::M2Item;
 use crate::ts::*;
-use lsp_types::{Location, Position, Url};
+use lsp_types::{Position, Url};
 use tree_sitter::{Query, QueryCursor};
 
-use crate::php::PHPClass;
-
-pub fn get_location_from_position(
-    map: &HashMap<String, PHPClass>,
-    uri: Url,
-    pos: Position,
-) -> Option<Location> {
+pub fn get_item_from_position(uri: Url, pos: Position) -> Option<M2Item> {
     let path = uri.path();
 
     let query_string = "
@@ -89,20 +82,18 @@ pub fn get_location_from_position(
     }
 
     match (class_name, method_name) {
-        (Some(class), Some(method)) => map.get(&class).map_or(None, |cls| {
-            cls.methods.get(&method).map_or(None, |m| {
-                Some(Location {
-                    uri: cls.uri.clone(),
-                    range: m.range.clone(),
-                })
-            })
-        }),
-        (Some(class), None) => map.get(&class).map_or(None, |cls| {
-            Some(Location {
-                uri: cls.uri.clone(),
-                range: cls.range.clone(),
-            })
-        }),
+        (Some(class), Some(method)) => Some(M2Item::Method(class, method)),
+        (Some(class), None) => {
+            if class.contains("::") {
+                let mut parts = class.split("::");
+                Some(M2Item::Const(
+                    parts.next()?.to_string(),
+                    parts.next()?.to_string(),
+                ))
+            } else {
+                Some(M2Item::Class(class))
+            }
+        }
         _ => None,
     }
 }

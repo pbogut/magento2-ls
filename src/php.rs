@@ -1,128 +1,133 @@
-use std::{collections::HashMap, path::PathBuf};
-
+use crate::ts::get_range_from_node;
+use convert_case::{Case, Casing};
 use glob::glob;
 use lsp_types::{Position, Range, Url};
-use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, path::PathBuf};
 use tree_sitter::{Node, Query, QueryCursor};
 
-use crate::ts::get_range_from_node;
+#[derive(Debug, Clone)]
+pub struct Callable {
+    pub class: String,
+    pub method: Option<String>,
+}
 
-const CACHE_FILE: &str = ".magento2-ls.index";
+#[derive(Debug, Clone)]
+pub enum M2Item {
+    Class(String),
+    Method(String, String),
+    Const(String, String),
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+enum M2Module {
+    Theme(String),
+    Module(String),
+    Library(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct PHPClass {
     pub fqn: String,
     pub uri: Url,
     pub range: Range,
     pub methods: HashMap<String, PHPMethod>,
+    pub constants: HashMap<String, PHPConst>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PHPMethod {
     pub name: String,
     pub range: Range,
 }
 
-pub fn parse_php_files(map: &mut HashMap<String, PHPClass>, root_path: PathBuf) {
-    let vendor_map = load_vendor(&root_path);
+#[derive(Debug, Clone)]
+pub struct PHPConst {
+    pub name: String,
+    pub range: Range,
+}
 
-    let path_str = root_path
-        .to_str()
-        .expect("Correct path is required")
-        .to_string();
+fn register_param_to_module(param: &str) -> Option<M2Module> {
+    if param.matches('/').count() == 2 {
+        Some(M2Module::Theme(param.to_string()))
+    } else if param.matches('/').count() == 1 {
+        let mut parts = param.splitn(2, '/');
+        let p1 = parts.next()?.to_case(Case::Pascal);
+        let p2 = parts.next()?;
 
-    let tmp_modules =
-        glob((path_str + "/**/registration.php").as_str()).expect("Failed to read glob pattern");
-
-    let mut progress_max = 0;
-    let mut modules = vec![];
-    for module in tmp_modules {
-        progress_max += 1;
-        modules.push(module);
+        if p2.matches('-').count() > 0 {
+            let mut parts = p2.splitn(2, '-');
+            let p2 = parts.next()?.to_case(Case::Pascal);
+            let p3 = parts.next()?.to_case(Case::Pascal);
+            Some(M2Module::Library(format!("{}\\{}\\{}", p1, p2, p3)))
+        } else {
+            Some(M2Module::Library(format!(
+                "{}\\{}",
+                p1,
+                p2.to_case(Case::Pascal)
+            )))
+        }
+    } else if param.matches('_').count() == 1 {
+        let mut parts = param.split('_');
+        Some(M2Module::Module(format!(
+            "{}\\{}",
+            parts.next()?,
+            parts.next()?
+        )))
+    } else {
+        None
     }
-    let mut progress_cur = 0;
-    for module in modules {
-        progress_cur += 1;
-        eprintln!("Index Progress: {}/{}", progress_cur, progress_max);
-        match module {
-            Ok(path) => {
-                let path_str = path.to_str().expect("path error");
-                let files = glob(
-                    (path_str[..path_str.len() - "/registration.php".len()].to_string()
-                        + "/**/*.php")
-                        .as_str(),
-                )
-                .expect("Failed to read glob pattern");
-                for file in files {
-                    match file {
-                        Ok(path) => {
-                            let path_str = path.to_str().unwrap_or("");
-                            if path_str.ends_with("Test.php") {
-                                continue;
-                            }
-                            if path_str.contains("/dev/tests/") {
-                                continue;
-                            }
-                            if path_str.contains("/vendor/") {
-                                if let Some(cls) = vendor_map.get(path_str) {
-                                    map.insert(cls.fqn.clone(), cls.clone());
-                                    continue;
+}
+
+pub fn get_modules_map(root_path: &PathBuf) -> HashMap<String, PathBuf> {
+    let mut map: HashMap<String, PathBuf> = HashMap::new();
+    let modules = glob(root_path.join("**/registration.php").to_str().unwrap())
+        .expect("Failed to read glob pattern");
+
+    let module_name_query = "
+    (scoped_call_expression
+      (name) @reg (#eq? @reg register)
+      (arguments
+        (string) @module_name
+      )
+    )";
+
+    for moule_registration in modules {
+        moule_registration.map_or_else(
+            |_e| panic!("buhu"),
+            |file_path| {
+                let content = std::fs::read_to_string(&file_path)
+                    .expect("Should have been able to read the file");
+
+                let tree = tree_sitter_parsers::parse(&content, "php");
+                Query::new(tree.language(), &module_name_query).map_or_else(
+                    |e| eprintln!("Error creating query: {:?}", e),
+                    |query| {
+                        let mut cursor = QueryCursor::new();
+                        let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+                        for m in matches {
+                            let mod_name = crate::ts::get_node_text(m.captures[1].node, &content);
+                            let mod_name = mod_name.trim_matches('"').trim_matches('\'');
+
+                            let mut parent = file_path.clone();
+                            parent.pop();
+
+                            match register_param_to_module(mod_name) {
+                                Some(M2Module::Module(m)) => {
+                                    map.insert(m, parent);
                                 }
-                            }
-                            if path.is_file() {
-                                if false {
-                                    continue;
+                                Some(M2Module::Library(l)) => {
+                                    map.insert(l, parent);
                                 }
-                                match parse_php_file(path) {
-                                    Some(cls) => {
-                                        map.insert(cls.fqn.clone(), cls);
-                                    }
-                                    None => {}
-                                }
+                                _ => (),
                             }
                         }
-                        Err(e) => eprintln!("{:?}", e),
-                    }
-                }
-            }
-            Err(e) => eprintln!("{:?}", e),
-        }
+                    },
+                );
+            },
+        );
     }
-    save_vendor(root_path, map);
-}
 
-fn load_vendor(root_path: &PathBuf) -> HashMap<String, PHPClass> {
-    let root_string = root_path
-        .to_str()
-        .expect("root path is required")
-        .to_string();
-    std::fs::File::open(root_string.clone() + "/" + CACHE_FILE).map_or(HashMap::new(), |f| {
-        let reader = std::io::BufReader::new(f);
-        bincode::deserialize_from(reader).unwrap_or(HashMap::new())
-    })
-}
-
-fn save_vendor(root_path: PathBuf, map: &HashMap<String, PHPClass>) {
-    let root_string = root_path
-        .to_str()
-        .expect("root path is required")
-        .to_string();
-    if let Ok(f) = std::fs::File::create(root_string.clone() + "/" + CACHE_FILE) {
-        let mut vendor_map: HashMap<String, PHPClass> = HashMap::new();
-
-        for (_, value) in map {
-            if value
-                .uri
-                .path()
-                .starts_with((root_string.clone() + "/vendor/").as_str())
-            {
-                vendor_map.insert(value.uri.path().to_string(), value.clone());
-            }
-        }
-        bincode::serialize_into(f, &vendor_map)
-            .map_err(|e| eprintln!("Failed to write index file: {:?}", e))
-            .expect("Failed to write index file");
-    }
+    map
 }
 
 pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
@@ -131,7 +136,8 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
       (class_declaration (name) @class)                  ; pattern: 1
       (interface_declaration (name) @class)              ; pattern: 2
       ((method_declaration (visibility_modifier)
-        @_vis (name) @name) (#eq? @_vis \"public\"))       ; pattern: 3
+        @_vis (name) @name) (#eq? @_vis \"public\"))     ; pattern: 3
+      (const_element (name) @const)                      ; pattern: 4
     ";
 
     let content =
@@ -148,6 +154,7 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
     let mut ns: Option<Node> = None;
     let mut cls: Option<Node> = None;
     let mut methods: HashMap<String, PHPMethod> = HashMap::new();
+    let mut constants: HashMap<String, PHPConst> = HashMap::new();
 
     for m in matches {
         if m.pattern_index == 0 {
@@ -165,6 +172,19 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
                     PHPMethod {
                         name: method_name.to_string(),
                         range: get_range_from_node(method_node),
+                    },
+                );
+            }
+        }
+        if m.pattern_index == 4 {
+            let const_node = m.captures[0].node;
+            let const_name = const_node.utf8_text(&content.as_bytes()).unwrap_or("");
+            if const_name != "" {
+                constants.insert(
+                    const_name.to_string(),
+                    PHPConst {
+                        name: const_name.to_string(),
+                        range: get_range_from_node(const_node),
                     },
                 );
             }
@@ -202,5 +222,6 @@ pub fn parse_php_file(file_path: PathBuf) -> Option<PHPClass> {
         uri,
         range,
         methods,
+        constants,
     });
 }
