@@ -1,12 +1,13 @@
 mod php;
 mod ts;
 mod xml;
+use anyhow::{Context, Result};
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
 use lsp_types::{
     request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
 };
 use lsp_types::{GotoDefinitionParams, Location, OneOf};
-use php::*;
+use php::{parse_php_file, M2Item, PHPClass};
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
@@ -26,14 +27,14 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     let (connection, io_threads) = Connection::stdio();
 
     // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
-    let server_capabilities = serde_json::to_value(&ServerCapabilities {
+    let server_capabilities = serde_json::to_value(ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
         ..Default::default()
     })
-    .unwrap();
+    .context("Deserializing server capabilities")?;
     let initialization_params = connection.initialize(server_capabilities)?;
 
-    main_loop(connection, initialization_params)?;
+    main_loop(&connection, initialization_params)?;
     io_threads.join()?;
 
     // Shut down gracefully.
@@ -42,15 +43,16 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
 }
 
 fn main_loop(
-    connection: Connection,
+    connection: &Connection,
     init_params: serde_json::Value,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
-    let params: InitializeParams = serde_json::from_value(init_params).unwrap();
+    let params: InitializeParams =
+        serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
     let map: HashMap<String, PHPClass> = HashMap::new();
 
     eprint!("Preparing index...");
-    let root_path = params.root_uri.as_ref().unwrap().path();
+    let root_path = params.root_uri.as_ref().context("Root uri to path")?.path();
     let mut indexer = Indexer {
         php_classes: map,
         magento_modules: php::get_modules_map(&PathBuf::from(root_path)),
@@ -69,11 +71,13 @@ fn main_loop(
                 match cast::<GotoDefinition>(req) {
                     Ok((id, params)) => {
                         eprintln!("got gotoDefinition request #{id}: {params:?}");
-                        let result = match get_location_from_params(&mut indexer, params) {
-                            Some(loc) => Some(GotoDefinitionResponse::Array(vec![loc])),
-                            None => Some(GotoDefinitionResponse::Array(vec![])),
-                        };
-                        let result = serde_json::to_value(&result).unwrap();
+                        let result = Some(GotoDefinitionResponse::Array(
+                            get_location_from_params(&mut indexer, params)
+                                .map_or(vec![], |loc| vec![loc]),
+                        ));
+
+                        let result =
+                            serde_json::to_value(&result).context("Error serializing response")?;
                         let resp = Response {
                             id,
                             result: Some(result),
@@ -99,7 +103,7 @@ fn main_loop(
 }
 
 fn get_module_path(index: &Indexer, class: &str) -> Option<(PathBuf, Vec<String>)> {
-    let mut parts = class.split("\\").collect::<Vec<_>>();
+    let mut parts = class.split('\\').collect::<Vec<_>>();
     let mut suffix = vec![];
 
     while let Some(part) = parts.pop() {
@@ -122,17 +126,17 @@ fn get_php_class_from_class_name(index: &mut Indexer, class: &str) -> Option<PHP
     match index.php_classes.get(class) {
         Some(phpclass) => Some(phpclass.clone()),
         None => {
-            match get_module_path(index, &class) {
+            match get_module_path(index, class) {
                 None => None,
                 Some((mut file_path, suffix)) => {
-                    suffix.iter().for_each(|part| {
+                    for part in suffix {
                         file_path.push(part);
-                    });
+                    }
                     file_path.set_extension("php");
 
                     match file_path.try_exists() {
                         Ok(true) => {
-                            let phpclass = parse_php_file(file_path.clone())?;
+                            let phpclass = parse_php_file(&file_path)?;
                             // update indexer for future use
                             index
                                 .php_classes
@@ -151,13 +155,13 @@ fn get_location_from_params(index: &mut Indexer, params: GotoDefinitionParams) -
     let uri = params.text_document_position_params.text_document.uri;
     let pos = params.text_document_position_params.position;
 
-    match xml::get_item_from_position(uri, pos) {
+    match xml::get_item_from_position(&uri, pos) {
         Some(M2Item::Class(class)) => {
             let phpclass = get_php_class_from_class_name(index, &class)?;
             index.php_classes.insert(class.clone(), phpclass.clone());
             Some(Location {
                 uri: phpclass.uri.clone(),
-                range: phpclass.range.clone(),
+                range: phpclass.range,
             })
         }
         Some(M2Item::Method(class, method)) => {
