@@ -7,7 +7,11 @@ The Magento 2 Language Server is a tool that acts as a bridge between Magento 2 
 Please note that the current version of the language server is considered to be of alpha quality. While it works and can be used, it has limited functionality and things can break.
 
 ## Features
- - Jump to definition of PHP classes from XML definitions of plugins, observers, jobs, and similar entities.
+ - Jump to definition from XML files:
+   - Jump to class (from `<plugin/>`, `<observer/>`, `<argument xsi:type="object"/>`, etc.)
+   - Jump to constant (from `<argument xsi:type="init_parameter"/>`)
+   - Jump to method (from `<service/>`, `<job/>`)
+   - Jump to template file (from `<block/>`, `<referenceBlock/>`, etc.)
 
 ### Planned (not implemented yet)
  - Code completion suggestions in XML files when referencing PHP classes and functions.
