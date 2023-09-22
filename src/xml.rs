@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::{
     php::M2Item,
     ts::{get_node_text, node_at_position},
@@ -85,7 +87,20 @@ pub fn get_item_from_position(uri: &Url, pos: Position) -> Option<M2Item> {
     match (class_name, method_name) {
         (Some(class), Some(method)) => Some(M2Item::Method(class, method)),
         (Some(class), None) => {
-            if class.contains("::") {
+            if does_ext_eq(&class, "phtml") {
+                let mut parts = class.split("::");
+                if is_frontend_location(path) {
+                    Some(M2Item::FrontPhtml(
+                        parts.next()?.to_string(),
+                        parts.next()?.to_string(),
+                    ))
+                } else {
+                    Some(M2Item::AdminPhtml(
+                        parts.next()?.to_string(),
+                        parts.next()?.to_string(),
+                    ))
+                }
+            } else if class.contains("::") {
                 let mut parts = class.split("::");
                 Some(M2Item::Const(
                     parts.next()?.to_string(),
@@ -97,4 +112,17 @@ pub fn get_item_from_position(uri: &Url, pos: Position) -> Option<M2Item> {
         }
         _ => None,
     }
+}
+
+fn is_frontend_location(path: &str) -> bool {
+    path.contains("\\view\\frontend\\")
+        || path.contains("/view/frontend/")
+        || path.contains("\\app\\design\\frontend\\")
+        || path.contains("app/design/frontend/")
+}
+
+fn does_ext_eq(path: &str, ext: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .map_or(false, |e| e.eq_ignore_ascii_case(ext))
 }

@@ -1,4 +1,7 @@
-use crate::ts::{get_node_text, get_range_from_node};
+use crate::{
+    ts::{get_node_text, get_range_from_node},
+    Indexer,
+};
 use convert_case::{Case, Casing};
 use glob::glob;
 use lsp_types::{Position, Range, Url};
@@ -19,6 +22,8 @@ pub enum M2Item {
     Class(String),
     Method(String, String),
     Const(String, String),
+    FrontPhtml(String, String),
+    AdminPhtml(String, String),
 }
 
 #[derive(Debug, Clone)]
@@ -44,14 +49,19 @@ pub struct PHPConst {
 
 #[derive(Debug, Clone)]
 enum M2Module {
-    Theme(String),
     Module(String),
     Library(String),
+    FrontTheme(String),
+    AdminTheme(String),
 }
 
 fn register_param_to_module(param: &str) -> Option<M2Module> {
     if param.matches('/').count() == 2 {
-        Some(M2Module::Theme(param.to_string()))
+        if param.starts_with("frontend") {
+            Some(M2Module::FrontTheme(param.to_string()))
+        } else {
+            Some(M2Module::AdminTheme(param.to_string()))
+        }
     } else if param.matches('/').count() == 1 {
         let mut parts = param.splitn(2, '/');
         let p1 = parts.next()?.to_case(Case::Pascal);
@@ -81,8 +91,8 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
-    let mut map: HashMap<String, PathBuf> = HashMap::new();
+// pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
+pub fn update_index(index: &mut Indexer, root_path: &Path) {
     let modules = glob(
         root_path
             .join("**/registration.php")
@@ -119,12 +129,24 @@ pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
                             let mut parent = file_path.clone();
                             parent.pop();
 
+                            // add module name "as is"
+                            index
+                                .magento_modules
+                                .insert(mod_name.to_string(), parent.clone());
+
+                            // add module name as namespace
                             match register_param_to_module(mod_name) {
                                 Some(M2Module::Module(m)) => {
-                                    map.insert(m, parent);
+                                    index.magento_modules.insert(m, parent);
                                 }
                                 Some(M2Module::Library(l)) => {
-                                    map.insert(l, parent);
+                                    index.magento_modules.insert(l, parent);
+                                }
+                                Some(M2Module::FrontTheme(t)) => {
+                                    index.magento_front_themes.insert(t, parent);
+                                }
+                                Some(M2Module::AdminTheme(t)) => {
+                                    index.magento_admin_themes.insert(t, parent);
                                 }
                                 _ => (),
                             }
@@ -134,8 +156,6 @@ pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
             },
         );
     }
-
-    map
 }
 
 pub fn parse_php_file(file_path: &PathBuf) -> Option<PHPClass> {
