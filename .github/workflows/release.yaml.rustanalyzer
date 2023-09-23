@@ -9,6 +9,7 @@ on:
     branches:
       - release
       - trigger-nightly
+      - github-actions
 
 env:
   CARGO_INCREMENTAL: 0
@@ -258,24 +259,24 @@ jobs:
         working-directory: ./editors/code
 
       - name: Publish Extension (Code Marketplace, release)
-        if: github.ref == 'refs/heads/release' && (github.repository == 'magento2-ls/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
+        if: github.ref == 'refs/heads/release' && (github.repository == 'pbogut/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
         working-directory: ./editors/code
         # token from https://dev.azure.com/magento2-ls/
         run: npx vsce publish --pat ${{ secrets.MARKETPLACE_TOKEN }} --packagePath ../../dist/magento2-ls-*.vsix
 
       - name: Publish Extension (OpenVSX, release)
-        if: github.ref == 'refs/heads/release' && (github.repository == 'magento2-ls/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
+        if: github.ref == 'refs/heads/release' && (github.repository == 'pbogut/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
         working-directory: ./editors/code
         run: npx ovsx publish --pat ${{ secrets.OPENVSX_TOKEN }} --packagePath ../../dist/magento2-ls-*.vsix
         timeout-minutes: 2
 
       - name: Publish Extension (Code Marketplace, nightly)
-        if: github.ref != 'refs/heads/release' && (github.repository == 'magento2-ls/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
+        if: github.ref != 'refs/heads/release' && (github.repository == 'pbogut/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
         working-directory: ./editors/code
         run: npx vsce publish --pat ${{ secrets.MARKETPLACE_TOKEN }} --packagePath ../../dist/magento2-ls-*.vsix --pre-release
 
       - name: Publish Extension (OpenVSX, nightly)
-        if: github.ref != 'refs/heads/release' && (github.repository == 'magento2-ls/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
+        if: github.ref != 'refs/heads/release' && (github.repository == 'pbogut/magento2-ls' || github.repository == 'rust-lang/magento2-ls')
         working-directory: ./editors/code
         run: npx ovsx publish --pat ${{ secrets.OPENVSX_TOKEN }} --packagePath ../../dist/magento2-ls-*.vsix
         timeout-minutes: 2
