@@ -17,7 +17,7 @@ pub struct Callable {
     pub method: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum M2Item {
     Class(String),
     Method(String, String),
