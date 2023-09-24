@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Magento 2 Language Server is a tool that acts as a bridge between Magento 2 XML and PHP files. It provides features such as jumping to the definition of PHP classes from XML definitions of plugins, observers, jobs, and similar entities. The goal is to also provide code completion suggestions in XML files when referencing PHP classes and functions, and potentially finding references of PHP classes/methods in XML in the future.
+The Magento 2 Language Server is a tool that serves as a connection between Magento 2 XML and PHP files. It offers features like navigating to the definition of PHP classes from XML definitions of plugins, observers, jobs, and other similar entities. The objective is to also offer code completion suggestions in XML files when referring to PHP classes and functions, and potentially identifying references of PHP classes/methods in XML in the future.
 
-Please note that the current version of the language server is considered to be of alpha quality. While it works and can be used, it has limited functionality and things can break.
+Please note that the current version of the language server is considered to be of alpha quality. Although it is functional and can be used, it has limited functionality and may encounter issues. It has been tested on Linux and should also work on MacOS, but Windows support is not available yet.
 
 ## Features
  - Jump to definition from XML files:
@@ -21,25 +21,25 @@ Please note that the current version of the language server is considered to be 
 
 ### Neovim (with Packer)
 
-Add the following lines to your init.lua file if you are using Packer as your plugin manager:
+Please add the following lines to your init.lua file if you are using Packer as your plugin manager.
 
 ```lua
 use({ 'pbogut/magento2-ls', 
   -- Build using cargo build --release
   run = "require'magento2_ls'.build()" ,
-  -- Alternatively, download compiled binary from github release
+  -- Alternatively, you can download the compiled binary from the GitHub release.
   -- run = "require'magento2_ls'.get_server()" ,
   config = "require'magento2_ls'.setup()" 
 })
 ```
 
-The `require('magento2_ls').setup()` command will register the language server with Neovim's built-in Language Server Protocol (LSP) using the `vim.lsp.start()` function. If you need to rebuild the language server for any reason, you can do so with:
+The command `require('magento2_ls').setup()` will register the language server with Neovim's built-in Language Server Protocol (LSP) using the function `vim.lsp.start()`. If you need to rebuild the language server for any reason, you can do it by using:
 
 ```lua
 require('magento2_ls').build()
 ```
 
-Or, you can download compiled binary for your system using:
+Alternatively, you can download the compiled binary for your system by using:
 
 ```lua
 require('magento2_ls').get_server()
