@@ -4,7 +4,7 @@
 
 The Magento 2 Language Server is a tool that serves as a connection between Magento 2 XML and PHP files. It offers features like navigating to the definition of PHP classes from XML definitions of plugins, observers, jobs, and other similar entities. The objective is to also offer code completion suggestions in XML files when referring to PHP classes and functions, and potentially identifying references of PHP classes/methods in XML in the future.
 
-Please note that the current version of the language server is considered to be of alpha quality. Although it is functional and can be used, it has limited functionality and may encounter issues. It has been tested on Linux and should also work on MacOS, but Windows support is not available yet.
+Please note that the current version of the language server is considered to be of alpha quality. Although it is functional and can be used, it has limited functionality and may encounter issues. It has been tested on Linux and should also work on MacOS and Windows.
 
 ## Features
  - Jump to definition from XML files:
