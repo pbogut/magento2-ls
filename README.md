@@ -25,7 +25,10 @@ Add the following lines to your init.lua file if you are using Packer as your pl
 
 ```lua
 use({ 'pbogut/magento2-ls', 
-  run = 'cargo build --release',
+  -- Build using cargo build --release
+  run = "require'magento2_ls'.build()" ,
+  -- Alternatively, download compiled binary from github release
+  -- run = "require'magento2_ls'.get_server()" ,
   config = "require'magento2_ls'.setup()" 
 })
 ```
@@ -34,6 +37,12 @@ The `require('magento2_ls').setup()` command will register the language server w
 
 ```lua
 require('magento2_ls').build()
+```
+
+Or, you can download compiled binary for your system using:
+
+```lua
+require('magento2_ls').get_server()
 ```
 
 ### Visual Studio Code
