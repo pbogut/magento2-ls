@@ -19,26 +19,31 @@ jobs:
               NAME: linux-x64,
               OS: ubuntu-22.04,
               TARGET: x86_64-unknown-linux-gnu,
+              CODE_TARGET: linux-x64,
             }
           - {
               NAME: windows-x64,
               OS: windows-2022,
               TARGET: x86_64-pc-windows-msvc,
+              CODE_TARGET: win32-x64
             }
           - {
               NAME: windows-arm64,
               OS: windows-2022,
               TARGET: aarch64-pc-windows-msvc,
+              CODE_TARGET: win32-arm64,
             }
           - {
               NAME: darwin-x64,
               OS: macos-12,
               TARGET: x86_64-apple-darwin,
+              CODE_TARGET: darwin-x64,
             }
           - {
               NAME: darwin-arm64,
               OS: macos-12,
               TARGET: aarch64-apple-darwin,
+              CODE_TARGET: darwin-arm64,
             }
     steps:
       - name: Checkout code
@@ -61,14 +66,33 @@ jobs:
             extension=".exe"
           fi
 
-          mkdir bin
-          cp "target/${{ matrix.build.TARGET }}/release/${binary_name}" "bin/${binary_name}-${{ matrix.build.NAME }}${extension}"
+          mkdir -p dist
+          cp "target/${{ matrix.build.TARGET }}/release/${binary_name}" "dist/${binary_name}-${{ matrix.build.NAME }}${extension}"
 
-      - name: Upload binary
+      - name: Build vscode extension
+        shell: bash
+        run: |
+          version=$(awk -F ' = ' '$1 ~ /version/ { gsub(/["]/, "", $2); printf("%s",$2) }' Cargo.toml)
+          binary_name="magento2-ls"
+
+          extension=""
+          # windows binaries have ".exe" extension
+          if [[ "${{ matrix.build.OS }}" == *"windows"* ]]; then
+            extension=".exe"
+          fi
+
+          mkdir -p dist
+          cp "target/${{ matrix.build.TARGET }}/release/${binary_name}" "vscode/server/${binary_name}${extension}"
+          cp "README.md" "vscode/"
+          cd "vscode"
+          npm install --include=dev
+          npx vsce package --target ${{ matrix.build.CODE_TARGET }} -o ../dist/magento2-ls.${version}.${{ matrix.build.CODE_TARGET }}.vsix
+
+      - name: Upload dist
         uses: actions/upload-artifact@v3
         with:
-          name: built-binaries
-          path: bin/*
+          name: built-dist
+          path: dist/*
 
   release:
     name: Release
@@ -81,11 +105,11 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Download binaries
+      - name: Download dist
         uses: actions/download-artifact@v3
         with:
-          name: built-binaries
-          path: bin
+          name: built-dist
+          path: dist
 
       - name: Check if release should be created
         shell: bash
@@ -110,9 +134,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: env.SHOULD_RELEASE == 'yes'
         with:
-          files: bin/*
+          files: dist/*
           tag_name: ${{ env.RELEASE_VERSION }}
           fail_on_unmatched_files: true
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
