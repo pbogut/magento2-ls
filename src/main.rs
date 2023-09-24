@@ -54,7 +54,11 @@ fn main_loop(
     let map: HashMap<String, PHPClass> = HashMap::new();
 
     eprint!("Preparing index...");
-    let root_path = params.root_uri.as_ref().context("Root uri to path")?.path();
+    let root_uri = params.root_uri.context("Root uri is required")?;
+    let root_path = root_uri
+        .to_file_path()
+        .expect("Root uri should be valid file path");
+
     let mut indexer = Indexer {
         php_classes: map,
         magento_modules: HashMap::new(),

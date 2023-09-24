@@ -23,7 +23,7 @@ struct XmlTag {
 
 impl XmlTag {
     fn new() -> Self {
-        XmlTag {
+        Self {
             name: String::new(),
             attributes: HashMap::new(),
             text: String::new(),
@@ -46,7 +46,9 @@ fn get_item_from_pos(content: &str, uri: &Url, pos: Position) -> Option<M2Item> 
 
     match tag.hover_on {
         XmlPart::Attribute(ref attr_name) => match attr_name.as_str() {
-            "method" | "instance" | "class" => try_method_item_from_tag(&tag),
+            "method" | "instance" | "class" => try_method_item_from_tag(&tag).or_else(|| {
+                try_any_item_from_str(tag.attributes.get(attr_name)?, is_frontend_location(path))
+            }),
             "template" => {
                 try_phtml_item_from_str(tag.attributes.get(attr_name)?, is_frontend_location(path))
             }
@@ -150,8 +152,10 @@ fn try_any_item_from_str(text: &str, is_frontend: bool) -> Option<M2Item> {
         try_phtml_item_from_str(text, is_frontend)
     } else if text.contains("::") {
         try_const_item_from_str(text)
-    } else {
+    } else if text.chars().next()?.is_uppercase() {
         Some(get_class_item_from_str(text))
+    } else {
+        None
     }
 }
 
@@ -225,6 +229,7 @@ mod test {
     use std::path::PathBuf;
 
     fn get_test_item(xml: &str, path: &str) -> Option<M2Item> {
+        let win_path = format!("c:{}", path.replace('/', "\\"));
         let mut character = 0;
         let mut line = 0;
         for l in xml.lines() {
@@ -235,7 +240,8 @@ mod test {
             line += 1;
         }
         let pos = Position { line, character };
-        let uri = Url::from_file_path(PathBuf::from(path)).unwrap();
+        let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
+            .unwrap();
         get_item_from_pos(&xml.replace('|', ""), &uri, pos)
     }
 
@@ -384,5 +390,16 @@ mod test {
             "/a/a/c",
         );
         assert_eq!(item, Some(M2Item::Class("Some\\Class\\Name".to_string())))
+    }
+
+    #[test]
+    fn test_should_get_class_from_class_attribute_of_block_tag() {
+        let item = get_test_item(
+            r#"<?xml version=\"1.0\"?>
+               <block class="A\|B\C" name="some_name" template="Some_Module::temp/file.phtml"/>
+            "#,
+            "/a/a/c",
+        );
+        assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())))
     }
 }
