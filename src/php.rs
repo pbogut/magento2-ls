@@ -1,15 +1,17 @@
-use crate::{
-    ts::{get_node_text, get_range_from_node},
-    Indexer,
-};
-use convert_case::{Case, Casing};
-use glob::glob;
-use lsp_types::{Position, Range, Url};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+
+use convert_case::{Case, Casing};
+use glob::glob;
+use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
+
+use crate::{
+    ts::{get_node_text, get_range_from_node},
+    Indexer,
+};
 
 #[derive(Debug, Clone)]
 pub struct Callable {
