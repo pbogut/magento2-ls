@@ -1,8 +1,13 @@
 {
   "name": "magento2-ls",
-  "description": "Language Server for Magento 2",
+  "displayName": "Magento2 Language Server",
+  "description": "Language Server for Magento 2 Projects",
   "version": "0.0.2",
   "publisher": "pbogut",
+  "author": {
+    "name": "Paweł Bogut",
+    "email": "pbogut@pbogut.me"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/pbogut/magento2-ls"
@@ -10,6 +15,7 @@
   "engines": {
     "vscode": "^1.74.0"
   },
+  "icon": "logo.png",
   "activationEvents": [
     "onLanguage:xml"
   ],
