@@ -47,8 +47,7 @@ require('magento2_ls').get_server()
 
 ### Visual Studio Code
 
-Support for Visual Studio Code is planned and will be added in a future update.
-
+You can download the `vsix` file from the [GitHub Releases](https://github.com/pbogut/magento2-ls/releases) page.
 
 ### Non goals
 
