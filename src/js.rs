@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use glob::glob;
 use lsp_types::{Position, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
-use crate::{ts::node_at_position, Indexer};
+use crate::{m2_types::M2Item, ts::node_at_position, Indexer};
 
 enum JSTypes {
     Map,
@@ -12,16 +12,10 @@ enum JSTypes {
     Mixins,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum M2Item {
-    Component(String),
-    ModComponent(String, String, PathBuf),
-    RelComponent(String, PathBuf),
-}
-
-pub fn update_index(index: &mut Indexer, root_path: &Path) {
+pub fn update_index(index: &mut Indexer) {
     let modules = glob(
-        root_path
+        index
+            .root_path()
             .join("**/requirejs-config.js")
             .to_str()
             .expect("Path should be in valid encoding"),
@@ -89,7 +83,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
 }
 
 fn resolve_component_text(index: &Indexer, text: &str, uri: &Url) -> Option<String> {
-    match index.js_maps.get(text) {
+    match index.get_component_map(text) {
         Some(t) => resolve_component_text(index, t, uri),
         None => Some(text.to_string()),
     }
@@ -108,7 +102,7 @@ fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item>
     {
         let mut parts = text.splitn(2, '/');
         let mod_name = parts.next()?.to_string();
-        let mod_path = index.magento_modules.get(&mod_name)?;
+        let mod_path = index.get_module_path(&mod_name)?;
         Some(M2Item::ModComponent(
             mod_name,
             parts.next()?.to_string(),
@@ -178,8 +172,8 @@ fn update_index_from_config(index: &mut Indexer, content: &str) {
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
         match get_kind(m.captures[1].node, content) {
-            Some(JSTypes::Map) | Some(JSTypes::Paths) => index.js_maps.insert(key, val),
-            Some(JSTypes::Mixins) => index.js_mixins.insert(key, val),
+            Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val),
+            Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
             None => continue,
         };
     }
@@ -216,13 +210,13 @@ fn get_node_text(node: Node, content: &str) -> String {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     use super::*;
 
     #[test]
     fn test_update_index_from_config() {
-        let mut index = crate::Indexer::new();
+        let mut index = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
         let content = r#"
         var config = {
             map: {
@@ -248,20 +242,20 @@ mod test {
         };
         "#;
 
-        let mut m = HashMap::new();
-        let mut x = HashMap::new();
-
-        ins(&mut m, "other/core/extension", "Other_Module/js/core_ext");
-        ins(&mut m, "prototype", "Something_Else/js/prototype.min");
-        ins(&mut m, "some/js/component", "Some_Model/js/component");
-        ins(&mut m, "otherComp", "Some_Other/js/comp");
-        ins(&mut x, "Mage_Module/js/smth", "My_Module/js/mixin/smth");
-        ins(&mut x, "Adobe_Module", "My_Module/js/mixin/adobe");
-
         update_index_from_config(&mut index, content);
 
-        assert_eq!(index.js_maps, m);
-        assert_eq!(index.js_mixins, x);
+        let mut result = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
+        result.add_component_map(
+            "other/core/extension",
+            "Other_Module/js/core_ext".to_string(),
+        );
+        result.add_component_map("prototype", "Something_Else/js/prototype.min");
+        result.add_component_map("some/js/component", "Some_Model/js/component");
+        result.add_component_map("otherComp", "Some_Other/js/comp");
+        result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
+        result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
+
+        assert_eq!(index, result);
     }
 
     #[test]
@@ -327,15 +321,8 @@ mod test {
         let pos = Position { line, character };
         let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
             .unwrap();
-        let mut index = Indexer::new();
-        index.magento_modules.insert(
-            "Some_Module".to_string(),
-            PathBuf::from("/a/b/c/Some_Module"),
-        );
+        let mut index = Indexer::new(Url::from_file_path("/a/b/c").ok()?);
+        index.add_module_path("Some_Module", PathBuf::from("/a/b/c/Some_Module"));
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
-    }
-
-    fn ins(map: &mut HashMap<String, String>, key: &str, val: &str) {
-        map.insert(key.to_string(), val.to_string());
     }
 }

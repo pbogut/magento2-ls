@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use convert_case::{Case, Casing};
 use glob::glob;
@@ -9,23 +6,14 @@ use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
+    indexer::Indexer,
     ts::{get_node_text, get_range_from_node},
-    Indexer,
 };
 
 #[derive(Debug, Clone)]
 pub struct Callable {
     pub class: String,
     pub method: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum M2Item {
-    Class(String),
-    Method(String, String),
-    Const(String, String),
-    FrontPhtml(String, String),
-    AdminPhtml(String, String),
 }
 
 #[derive(Debug, Clone)]
@@ -93,10 +81,10 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-// pub fn get_modules_map(root_path: &Path) -> HashMap<String, PathBuf> {
-pub fn update_index(index: &mut Indexer, root_path: &Path) {
+pub fn update_index(index: &mut Indexer) {
     let modules = glob(
-        root_path
+        index
+            .root_path()
             .join("**/registration.php")
             .to_str()
             .expect("Path should be in valid encoding"),
@@ -132,23 +120,21 @@ pub fn update_index(index: &mut Indexer, root_path: &Path) {
                             parent.pop();
 
                             // add module name "as is"
-                            index
-                                .magento_modules
-                                .insert(mod_name.to_string(), parent.clone());
+                            index.add_module_path(mod_name, parent.clone());
 
                             // add module name as namespace
                             match register_param_to_module(mod_name) {
                                 Some(M2Module::Module(m)) => {
-                                    index.magento_modules.insert(m, parent);
+                                    index.add_module_path(&m, parent);
                                 }
                                 Some(M2Module::Library(l)) => {
-                                    index.magento_modules.insert(l, parent);
+                                    index.add_module_path(&l, parent);
                                 }
                                 Some(M2Module::FrontTheme(t)) => {
-                                    index.magento_front_themes.insert(t, parent);
+                                    index.add_front_theme_path(&t, parent);
                                 }
                                 Some(M2Module::AdminTheme(t)) => {
-                                    index.magento_admin_themes.insert(t, parent);
+                                    index.add_admin_theme_path(&t, parent);
                                 }
                                 _ => (),
                             }
