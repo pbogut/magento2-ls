@@ -1,10 +1,11 @@
-use crate::{
-    php::M2Item,
-    ts::{get_node_text, node_at_position},
-};
 use lsp_types::{Position, Url};
 use std::{collections::HashMap, path::Path};
 use tree_sitter::{Query, QueryCursor};
+
+use crate::{
+    m2_types::M2Item,
+    ts::{get_node_text, node_at_position},
+};
 
 #[derive(Debug, Clone)]
 enum XmlPart {
