@@ -50,7 +50,7 @@ fn main_loop(
 
     let root_uri = params.root_uri.context("Root uri is required")?;
     let indexer = Indexer::new(root_uri).into_arc();
-    Indexer::update_index(&indexer);
+    let threads = Indexer::update_index(&indexer);
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {
@@ -92,6 +92,11 @@ fn main_loop(
             }
         }
     }
+
+    for thread in threads {
+        thread.join().ok();
+    }
+
     Ok(())
 }
 
