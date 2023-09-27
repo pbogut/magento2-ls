@@ -1,4 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread::spawn,
+    time::SystemTime,
+};
 
 use lsp_types::{Position, Url};
 
@@ -14,6 +20,8 @@ pub struct Indexer {
     root_uri: Url,
 }
 
+pub type ArcIndexer = Arc<Mutex<Indexer>>;
+
 impl Indexer {
     pub fn new(root_uri: Url) -> Self {
         Self {
@@ -24,11 +32,6 @@ impl Indexer {
             js_mixins: HashMap::new(),
             root_uri,
         }
-    }
-
-    pub fn update_index(&mut self) {
-        php::update_index(self);
-        js::update_index(self);
     }
 
     pub fn get_module_path(&self, module: &str) -> Option<PathBuf> {
@@ -89,4 +92,28 @@ impl Indexer {
             _ => None,
         }
     }
+
+    pub fn as_arc(self) -> ArcIndexer {
+        Arc::new(Mutex::new(self))
+    }
+
+    pub fn update_index(index: ArcIndexer) {
+        spawn_index(&index, php::update_index, "PHP Indexing");
+        spawn_index(&index, js::update_index, "JS Indexing");
+    }
+}
+
+fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(ArcIndexer), msg: &str) {
+    let index = Arc::clone(arc_indexer);
+    let msg = msg.to_owned();
+
+    spawn(move || {
+        eprintln!("Start {}", msg);
+        let index_start = SystemTime::now();
+        callback(index);
+        index_start.elapsed().map_or_else(
+            |_| eprintln!("{} done", msg),
+            |d| eprintln!("{} done in {:?}", msg, d),
+        );
+    });
 }

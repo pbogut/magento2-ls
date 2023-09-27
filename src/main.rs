@@ -5,7 +5,8 @@ mod php;
 mod ts;
 mod xml;
 
-use std::{error::Error, path::PathBuf, time::SystemTime};
+use std::sync::MutexGuard;
+use std::{error::Error, path::PathBuf};
 
 use anyhow::{Context, Result};
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
@@ -15,7 +16,7 @@ use lsp_types::{
 use lsp_types::{GotoDefinitionParams, Location, OneOf, Range, Url};
 
 use crate::{
-    indexer::Indexer,
+    indexer::{ArcIndexer, Indexer},
     m2_types::M2Item,
     php::{parse_php_file, PHPClass},
 };
@@ -51,17 +52,9 @@ fn main_loop(
     let params: InitializeParams =
         serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
-    let index_start = SystemTime::now();
-
-    eprint!("Preparing index...");
-
     let root_uri = params.root_uri.context("Root uri is required")?;
-    let mut indexer = Indexer::new(root_uri);
-    indexer.update_index();
-
-    index_start
-        .elapsed()
-        .map_or_else(|_| eprintln!(" done"), |d| eprintln!(" done in {:?}", d));
+    let indexer = Indexer::new(root_uri).as_arc();
+    Indexer::update_index(indexer.clone());
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {
@@ -76,7 +69,7 @@ fn main_loop(
                     Ok((id, params)) => {
                         eprintln!("got gotoDefinition request #{id}: {params:?}");
                         let result = Some(GotoDefinitionResponse::Array(
-                            get_location_from_params(&mut indexer, params)
+                            get_location_from_params(indexer.clone(), params)
                                 .map_or(vec![], |loc_list| loc_list),
                         ));
 
@@ -106,7 +99,7 @@ fn main_loop(
     Ok(())
 }
 
-fn get_module_path(index: &Indexer, class: &str) -> Option<(PathBuf, Vec<String>)> {
+fn get_module_path(index: MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, Vec<String>)> {
     let mut parts = class.split('\\').collect::<Vec<_>>();
     let mut suffix = vec![];
 
@@ -126,7 +119,7 @@ fn get_module_path(index: &Indexer, class: &str) -> Option<(PathBuf, Vec<String>
     None
 }
 
-fn get_php_class_from_class_name(index: &mut Indexer, class: &str) -> Option<PHPClass> {
+fn get_php_class_from_class_name(index: MutexGuard<Indexer>, class: &str) -> Option<PHPClass> {
     match get_module_path(index, class) {
         None => None,
         Some((mut file_path, suffix)) => {
@@ -144,12 +137,13 @@ fn get_php_class_from_class_name(index: &mut Indexer, class: &str) -> Option<PHP
 }
 
 fn get_location_from_params(
-    index: &mut Indexer,
+    arc_index: ArcIndexer,
     params: GotoDefinitionParams,
 ) -> Option<Vec<Location>> {
     let uri = params.text_document_position_params.text_document.uri;
     let pos = params.text_document_position_params.position;
 
+    let index = arc_index.lock().expect("Should be able to lock index");
     match index.get_item_from_position(&uri, pos) {
         Some(M2Item::ModComponent(_mod_name, file_path, mod_path)) => {
             let mut result = vec![];

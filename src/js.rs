@@ -4,7 +4,11 @@ use glob::glob;
 use lsp_types::{Position, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
-use crate::{m2_types::M2Item, ts::node_at_position, Indexer};
+use crate::{
+    indexer::{ArcIndexer, Indexer},
+    m2_types::M2Item,
+    ts::node_at_position,
+};
 
 enum JSTypes {
     Map,
@@ -12,9 +16,11 @@ enum JSTypes {
     Mixins,
 }
 
-pub fn update_index(index: &mut Indexer) {
+pub fn update_index(index: ArcIndexer) {
     let modules = glob(
         index
+            .lock()
+            .expect("Should be able to lock index")
             .root_path()
             .join("**/requirejs-config.js")
             .to_str()
@@ -29,7 +35,7 @@ pub fn update_index(index: &mut Indexer) {
                 let content = std::fs::read_to_string(&file_path)
                     .expect("Should have been able to read the file");
 
-                update_index_from_config(index, &content);
+                update_index_from_config(&index, &content);
             },
         );
     }
@@ -113,7 +119,7 @@ fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item>
     }
 }
 
-fn update_index_from_config(index: &mut Indexer, content: &str) {
+fn update_index_from_config(index: &ArcIndexer, content: &str) {
     let map_query = r#"
     (
       (identifier) @config
@@ -171,11 +177,14 @@ fn update_index_from_config(index: &mut Indexer, content: &str) {
     for m in matches {
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
-        match get_kind(m.captures[1].node, content) {
-            Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val),
-            Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
-            None => continue,
-        };
+        {
+            let mut index = index.lock().expect("Should be able to lock index");
+            match get_kind(m.captures[1].node, content) {
+                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val),
+                Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
+                None => continue,
+            };
+        }
     }
 }
 
@@ -216,7 +225,7 @@ mod test {
 
     #[test]
     fn test_update_index_from_config() {
-        let mut index = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
+        let index = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
         let content = r#"
         var config = {
             map: {
@@ -242,7 +251,8 @@ mod test {
         };
         "#;
 
-        update_index_from_config(&mut index, content);
+        let arc_index = index.as_arc();
+        update_index_from_config(&arc_index, content);
 
         let mut result = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
         result.add_component_map(
@@ -255,7 +265,7 @@ mod test {
         result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
 
-        assert_eq!(index, result);
+        assert_eq!(arc_index.lock().unwrap().to_owned(), result);
     }
 
     #[test]

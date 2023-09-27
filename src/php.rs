@@ -6,7 +6,7 @@ use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
-    indexer::Indexer,
+    indexer::ArcIndexer,
     ts::{get_node_text, get_range_from_node},
 };
 
@@ -81,9 +81,11 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn update_index(index: &mut Indexer) {
+pub fn update_index(index: ArcIndexer) {
     let modules = glob(
         index
+            .lock()
+            .expect("Should be able to lock index")
             .root_path()
             .join("**/registration.php")
             .to_str()
@@ -119,24 +121,28 @@ pub fn update_index(index: &mut Indexer) {
                             let mut parent = file_path.clone();
                             parent.pop();
 
-                            // add module name "as is"
-                            index.add_module_path(mod_name, parent.clone());
+                            {
+                                let mut index = index.lock().expect("Should be able to lock index");
 
-                            // add module name as namespace
-                            match register_param_to_module(mod_name) {
-                                Some(M2Module::Module(m)) => {
-                                    index.add_module_path(&m, parent);
+                                // add module name "as is"
+                                index.add_module_path(mod_name, parent.clone());
+
+                                // add module name as namespace
+                                match register_param_to_module(mod_name) {
+                                    Some(M2Module::Module(m)) => {
+                                        index.add_module_path(&m, parent);
+                                    }
+                                    Some(M2Module::Library(l)) => {
+                                        index.add_module_path(&l, parent);
+                                    }
+                                    Some(M2Module::FrontTheme(t)) => {
+                                        index.add_front_theme_path(&t, parent);
+                                    }
+                                    Some(M2Module::AdminTheme(t)) => {
+                                        index.add_admin_theme_path(&t, parent);
+                                    }
+                                    _ => (),
                                 }
-                                Some(M2Module::Library(l)) => {
-                                    index.add_module_path(&l, parent);
-                                }
-                                Some(M2Module::FrontTheme(t)) => {
-                                    index.add_front_theme_path(&t, parent);
-                                }
-                                Some(M2Module::AdminTheme(t)) => {
-                                    index.add_admin_theme_path(&t, parent);
-                                }
-                                _ => (),
                             }
                         }
                     },
