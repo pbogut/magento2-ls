@@ -6,7 +6,7 @@ use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
-    indexer::ArcIndexer,
+    indexer::{ArcIndexer, Indexer},
     ts::{get_node_text, get_range_from_node},
 };
 
@@ -81,7 +81,7 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn update_index(index: ArcIndexer) {
+pub fn update_index(index: &ArcIndexer) {
     let modules = glob(
         index
             .lock()
@@ -121,28 +121,21 @@ pub fn update_index(index: ArcIndexer) {
                             let mut parent = file_path.clone();
                             parent.pop();
 
-                            {
-                                let mut index = index.lock().expect("Should be able to lock index");
-
-                                // add module name "as is"
-                                index.add_module_path(mod_name, parent.clone());
-
-                                // add module name as namespace
-                                match register_param_to_module(mod_name) {
-                                    Some(M2Module::Module(m)) => {
-                                        index.add_module_path(&m, parent);
-                                    }
-                                    Some(M2Module::Library(l)) => {
-                                        index.add_module_path(&l, parent);
-                                    }
-                                    Some(M2Module::FrontTheme(t)) => {
-                                        index.add_front_theme_path(&t, parent);
-                                    }
-                                    Some(M2Module::AdminTheme(t)) => {
-                                        index.add_admin_theme_path(&t, parent);
-                                    }
-                                    _ => (),
+                            Indexer::lock(index).add_module_path(mod_name, parent.clone());
+                            match register_param_to_module(mod_name) {
+                                Some(M2Module::Module(m)) => {
+                                    Indexer::lock(index).add_module_path(&m, parent);
                                 }
+                                Some(M2Module::Library(l)) => {
+                                    Indexer::lock(index).add_module_path(&l, parent);
+                                }
+                                Some(M2Module::FrontTheme(t)) => {
+                                    Indexer::lock(index).add_front_theme_path(&t, parent);
+                                }
+                                Some(M2Module::AdminTheme(t)) => {
+                                    Indexer::lock(index).add_admin_theme_path(&t, parent);
+                                }
+                                _ => (),
                             }
                         }
                     },

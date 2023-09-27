@@ -16,7 +16,7 @@ enum JSTypes {
     Mixins,
 }
 
-pub fn update_index(index: ArcIndexer) {
+pub fn update_index(index: &ArcIndexer) {
     let modules = glob(
         index
             .lock()
@@ -35,7 +35,7 @@ pub fn update_index(index: ArcIndexer) {
                 let content = std::fs::read_to_string(file_path)
                     .expect("Should have been able to read the file");
 
-                update_index_from_config(&index, &content);
+                update_index_from_config(index, &content);
             },
         );
     }
@@ -44,7 +44,7 @@ pub fn update_index(index: ArcIndexer) {
 pub fn make_web_uris(root: &Path, path: &Path) -> Vec<Url> {
     let mut result = vec![];
     for area in ["base", "frontend", "backend"] {
-        let mut maybe_file = root.join("view").join(&area).join("web").join(path);
+        let mut maybe_file = root.join("view").join(area).join("web").join(path);
         maybe_file.set_extension("js");
         if maybe_file.exists() {
             result.push(Url::from_file_path(&maybe_file).expect("Should be valid url"));
@@ -68,7 +68,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
       (arguments (array (string) @str))
     )
     "#;
-    let tree = tree_sitter_parsers::parse(&content, "javascript");
+    let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = Query::new(tree.language(), query)
         .map_err(|e| eprintln!("Error creating query: {:?}", e))
         .expect("Error creating query");
@@ -78,8 +78,8 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
 
     for m in matches {
         if node_at_position(m.captures[1].node, pos) {
-            let text = get_node_text(m.captures[1].node, &content);
-            let text = resolve_component_text(index, &text, uri)?;
+            let text = get_node_text(m.captures[1].node, content);
+            let text = resolve_component_text(index, &text)?;
 
             return text_to_component(index, text, uri);
         }
@@ -88,11 +88,11 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
     None
 }
 
-fn resolve_component_text(index: &Indexer, text: &str, uri: &Url) -> Option<String> {
-    match index.get_component_map(text) {
-        Some(t) => resolve_component_text(index, t, uri),
-        None => Some(text.to_string()),
-    }
+fn resolve_component_text(index: &Indexer, text: &str) -> Option<String> {
+    index.get_component_map(text).map_or_else(
+        || Some(text.to_string()),
+        |t| resolve_component_text(index, t),
+    )
 }
 
 fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item> {
@@ -103,7 +103,7 @@ fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item>
         path.pop();
         Some(M2Item::RelComponent(text, path))
     } else if text.split('/').count() > 1
-        && begining.matches("_").count() == 1
+        && begining.matches('_').count() == 1
         && begining.chars().next().unwrap_or('a').is_uppercase()
     {
         let mut parts = text.splitn(2, '/');
@@ -112,7 +112,7 @@ fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item>
         Some(M2Item::ModComponent(
             mod_name,
             parts.next()?.to_string(),
-            mod_path.clone(),
+            mod_path,
         ))
     } else {
         Some(M2Item::Component(text))

@@ -54,7 +54,7 @@ fn main_loop(
 
     let root_uri = params.root_uri.context("Root uri is required")?;
     let indexer = Indexer::new(root_uri).into_arc();
-    Indexer::update_index(indexer.clone());
+    Indexer::update_index(&indexer);
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {
@@ -69,7 +69,7 @@ fn main_loop(
                     Ok((id, params)) => {
                         eprintln!("got gotoDefinition request #{id}: {params:?}");
                         let result = Some(GotoDefinitionResponse::Array(
-                            get_location_from_params(indexer.clone(), params)
+                            get_location_from_params(&indexer, params)
                                 .map_or(vec![], |loc_list| loc_list),
                         ));
 
@@ -99,7 +99,7 @@ fn main_loop(
     Ok(())
 }
 
-fn get_module_path(index: MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, Vec<String>)> {
+fn get_module_path(index: &MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, Vec<String>)> {
     let mut parts = class.split('\\').collect::<Vec<_>>();
     let mut suffix = vec![];
 
@@ -107,10 +107,11 @@ fn get_module_path(index: MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, 
         suffix.push(part.to_string());
         let prefix = parts.join("\\");
 
-        match index.get_module_path(&prefix) {
+        let module_path = index.get_module_path(&prefix);
+        match module_path {
             Some(mod_path) => {
                 suffix.reverse();
-                return Some((mod_path.clone(), suffix));
+                return Some((mod_path, suffix));
             }
             None => continue,
         }
@@ -119,8 +120,9 @@ fn get_module_path(index: MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, 
     None
 }
 
-fn get_php_class_from_class_name(index: MutexGuard<Indexer>, class: &str) -> Option<PHPClass> {
-    match get_module_path(index, class) {
+fn get_php_class_from_class_name(index: &MutexGuard<Indexer>, class: &str) -> Option<PHPClass> {
+    let module_path = get_module_path(index, class);
+    match module_path {
         None => None,
         Some((mut file_path, suffix)) => {
             for part in suffix {
@@ -137,14 +139,15 @@ fn get_php_class_from_class_name(index: MutexGuard<Indexer>, class: &str) -> Opt
 }
 
 fn get_location_from_params(
-    arc_index: ArcIndexer,
+    index: &ArcIndexer,
     params: GotoDefinitionParams,
 ) -> Option<Vec<Location>> {
     let uri = params.text_document_position_params.text_document.uri;
     let pos = params.text_document_position_params.position;
 
-    let index = arc_index.lock().expect("Should be able to lock index");
-    match index.get_item_from_position(&uri, pos) {
+    // let index = arc_index.lock().expect("Should be able to lock index");
+    let item = Indexer::lock(index).get_item_from_position(&uri, pos);
+    match item {
         Some(M2Item::ModComponent(_mod_name, file_path, mod_path)) => {
             let mut result = vec![];
             for uri in js::make_web_uris(&mod_path, &PathBuf::from(&file_path)) {
@@ -169,7 +172,11 @@ fn get_location_from_params(
             }
         }
         Some(M2Item::Component(comp)) => {
-            let mut path = index.root_path().join("lib").join("web").join(&comp);
+            let mut path = Indexer::lock(index)
+                .root_path()
+                .join("lib")
+                .join("web")
+                .join(comp);
             path.set_extension("js");
             if path.exists() {
                 Some(vec![Location {
@@ -182,7 +189,7 @@ fn get_location_from_params(
         }
         Some(M2Item::AdminPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.get_module_path(&mod_name);
+            let mod_path = Indexer::lock(index).get_module_path(&mod_name);
             if let Some(path) = mod_path {
                 let templ_path = path
                     .join("view")
@@ -197,7 +204,8 @@ fn get_location_from_params(
                 }
             };
 
-            for theme_path in index.list_admin_themes_paths() {
+            #[allow(clippy::significant_drop_in_scrutinee)]
+            for theme_path in Indexer::lock(index).list_admin_themes_paths() {
                 let templ_path = theme_path.join(&mod_name).join("templates").join(&template);
                 if templ_path.is_file() {
                     result.push(Location {
@@ -211,7 +219,7 @@ fn get_location_from_params(
         }
         Some(M2Item::FrontPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.get_module_path(&mod_name);
+            let mod_path = Indexer::lock(index).get_module_path(&mod_name);
             if let Some(path) = mod_path {
                 let templ_path = path
                     .join("view")
@@ -226,7 +234,8 @@ fn get_location_from_params(
                 }
             };
 
-            for theme_path in index.list_front_themes_paths() {
+            #[allow(clippy::significant_drop_in_scrutinee)]
+            for theme_path in Indexer::lock(index).list_front_themes_paths() {
                 let templ_path = theme_path.join(&mod_name).join("templates").join(&template);
                 if templ_path.is_file() {
                     result.push(Location {
@@ -239,14 +248,14 @@ fn get_location_from_params(
             Some(result)
         }
         Some(M2Item::Class(class)) => {
-            let phpclass = get_php_class_from_class_name(index, &class)?;
+            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass.range,
             }])
         }
         Some(M2Item::Method(class, method)) => {
-            let phpclass = get_php_class_from_class_name(index, &class)?;
+            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass
@@ -256,7 +265,7 @@ fn get_location_from_params(
             }])
         }
         Some(M2Item::Const(class, constant)) => {
-            let phpclass = get_php_class_from_class_name(index, &class)?;
+            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass
