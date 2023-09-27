@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     thread::spawn,
     time::SystemTime,
 };
@@ -20,6 +20,7 @@ pub struct Indexer {
     root_uri: Url,
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub type ArcIndexer = Arc<Mutex<Indexer>>;
 
 impl Indexer {
@@ -97,20 +98,24 @@ impl Indexer {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn update_index(index: ArcIndexer) {
-        spawn_index(&index, php::update_index, "PHP Indexing");
-        spawn_index(&index, js::update_index, "JS Indexing");
+    pub fn update_index(index: &ArcIndexer) {
+        spawn_index(index, php::update_index, "PHP Indexing");
+        spawn_index(index, js::update_index, "JS Indexing");
+    }
+
+    pub fn lock(arc_indexer: &ArcIndexer) -> MutexGuard<Self> {
+        arc_indexer.lock().expect("Should be able to lock indexer")
     }
 }
 
-fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(ArcIndexer), msg: &str) {
+fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(&ArcIndexer), msg: &str) {
     let index = Arc::clone(arc_indexer);
     let msg = msg.to_owned();
 
     spawn(move || {
         eprintln!("Start {}", msg);
         let index_start = SystemTime::now();
-        callback(index);
+        callback(&index);
         index_start.elapsed().map_or_else(
             |_| eprintln!("{} done", msg),
             |d| eprintln!("{} done in {:?}", msg, d),
