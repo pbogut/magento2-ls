@@ -32,7 +32,7 @@ pub fn update_index(index: ArcIndexer) {
         require_config.map_or_else(
             |_e| panic!("buhu"),
             |file_path| {
-                let content = std::fs::read_to_string(&file_path)
+                let content = std::fs::read_to_string(file_path)
                     .expect("Should have been able to read the file");
 
                 update_index_from_config(&index, &content);
@@ -251,7 +251,7 @@ mod test {
         };
         "#;
 
-        let arc_index = index.as_arc();
+        let arc_index = index.into_arc();
         update_index_from_config(&arc_index, content);
 
         let mut result = Indexer::new(Url::from_file_path("/a/b/c").unwrap());

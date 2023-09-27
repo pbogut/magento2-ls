@@ -53,7 +53,7 @@ fn main_loop(
         serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
     let root_uri = params.root_uri.context("Root uri is required")?;
-    let indexer = Indexer::new(root_uri).as_arc();
+    let indexer = Indexer::new(root_uri).into_arc();
     Indexer::update_index(indexer.clone());
 
     eprintln!("Starting main loop");
