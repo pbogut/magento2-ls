@@ -93,7 +93,7 @@ impl Indexer {
         }
     }
 
-    pub fn as_arc(self) -> ArcIndexer {
+    pub fn into_arc(self) -> ArcIndexer {
         Arc::new(Mutex::new(self))
     }
 
