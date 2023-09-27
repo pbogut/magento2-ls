@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex, MutexGuard},
-    thread::spawn,
+    thread::{spawn, JoinHandle},
     time::SystemTime,
 };
 
@@ -98,9 +98,11 @@ impl Indexer {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn update_index(index: &ArcIndexer) {
-        spawn_index(index, php::update_index, "PHP Indexing");
-        spawn_index(index, js::update_index, "JS Indexing");
+    pub fn update_index(index: &ArcIndexer) -> Vec<JoinHandle<()>> {
+        vec![
+            spawn_index(index, php::update_index, "PHP Indexing"),
+            spawn_index(index, js::update_index, "JS Indexing"),
+        ]
     }
 
     pub fn lock(arc_indexer: &ArcIndexer) -> MutexGuard<Self> {
@@ -108,7 +110,7 @@ impl Indexer {
     }
 }
 
-fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(&ArcIndexer), msg: &str) {
+fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(&ArcIndexer), msg: &str) -> JoinHandle<()> {
     let index = Arc::clone(arc_indexer);
     let msg = msg.to_owned();
 
@@ -120,5 +122,5 @@ fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(&ArcIndexer), msg: &str) {
             |_| eprintln!("{} done", msg),
             |d| eprintln!("{} done in {:?}", msg, d),
         );
-    });
+    })
 }
