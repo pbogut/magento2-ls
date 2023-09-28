@@ -6,7 +6,7 @@ mod php;
 mod ts;
 mod xml;
 
-use std::error::Error;
+use std::{env, error::Error};
 
 use anyhow::{Context, Result};
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
@@ -48,7 +48,14 @@ fn main_loop(
     let params: InitializeParams =
         serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
-    let root_uri = params.root_uri.context("Root uri is required")?;
+    let root_uri = match params.root_uri {
+        Some(uri) => uri,
+        None => lsp_types::Url::from_file_path(env::current_dir()?).map_or_else(
+            |_e| panic!("Couldn't determine current directory as a URL"),
+            |url| url,
+        ),
+    };
+
     let indexer = Indexer::new(root_uri).into_arc();
     let threads = Indexer::update_index(&indexer);
 
