@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <config>
+        <type name="Some\Module\Test">
+            <plugin name="some_name"
+                type="Some\Module\Test" />
+        </type>
+    </config>
+    <routes>
+        <route url="/v1/test/route" method="GET">
+            <service class="Some\Module\Test" method="testMe" />
+        </route>
+    </routes>
+    <type name="Magento\Framework\App\State">
+        <arguments>
+            <argument name="mode" xsi:type="init_parameter">Some\Module\Test::TEST</argument>
+        </arguments>
+    </type>
+</root>
+

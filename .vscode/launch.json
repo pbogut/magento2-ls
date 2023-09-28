@@ -1,0 +1,17 @@
+{
+  "version": "0.3.0",
+  "configurations": [
+    {
+      "type": "extensionHost",
+      "request": "launch",
+      "name": "Debug LSP Extension",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceRoot}/vscode",
+        "--disable-extensions",
+        "${workspaceRoot}/tests/test.xml"
+      ],
+      "preLaunchTask": "Build Server and Extension"
+    }
+  ]
+}

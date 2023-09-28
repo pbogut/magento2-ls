@@ -1,20 +1,19 @@
 // @ts-check
 const { LanguageClient } = require("vscode-languageclient/node");
-const tmpdir = require("os").tmpdir();
 
 module.exports = {
   /** @param {import("vscode").ExtensionContext} context*/
   activate(context) {
-    const command =
-      context.asAbsolutePath("server/magento2-ls") +
-      (process.platform === "win32" ? ".exe" : "");
+    const extension = process.platform === "win32" ? ".exe" : "";
+
     /** @type {import("vscode-languageclient/node").ServerOptions} */
     const serverOptions = {
       run: {
-        command: command,
+        command: context.asAbsolutePath("server/magento2-ls") + extension,
       },
       debug: {
-        command: command,
+        command:
+          context.asAbsolutePath("../target/debug/magento2-ls") + extension,
       },
     };
 
@@ -33,4 +32,3 @@ module.exports = {
     client.start();
   },
 };
-

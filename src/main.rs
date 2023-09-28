@@ -61,15 +61,18 @@ fn main_loop(
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {
+        #[cfg(debug_assertions)]
         eprintln!("got msg: {msg:?}");
         match msg {
             Message::Request(req) => {
                 if connection.handle_shutdown(&req)? {
                     return Ok(());
                 }
+                #[cfg(debug_assertions)]
                 eprintln!("got request: {req:?}");
                 match cast::<GotoDefinition>(req) {
                     Ok((id, params)) => {
+                        #[cfg(debug_assertions)]
                         eprintln!("got gotoDefinition request #{id}: {params:?}");
                         let result = Some(GotoDefinitionResponse::Array(
                             lsp::get_location_from_params(&indexer, params)
@@ -91,11 +94,13 @@ fn main_loop(
                 };
                 // ...
             }
-            Message::Response(resp) => {
-                eprintln!("got response: {resp:?}");
+            Message::Response(_resp) => {
+                #[cfg(debug_assertions)]
+                eprintln!("got response: {_resp:?}");
             }
-            Message::Notification(not) => {
-                eprintln!("got notification: {not:?}");
+            Message::Notification(_not) => {
+                #[cfg(debug_assertions)]
+                eprintln!("got notification: {_not:?}");
             }
         }
     }
