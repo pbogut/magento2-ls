@@ -3,6 +3,8 @@ use std::{collections::HashMap, path::Path};
 use tree_sitter::{Query, QueryCursor};
 
 use crate::{
+    indexer::Indexer,
+    js,
     m2_types::M2Item,
     ts::{get_node_text, node_at_position},
 };
@@ -33,14 +35,14 @@ impl XmlTag {
     }
 }
 
-pub fn get_item_from_position(uri: &Url, pos: Position) -> Option<M2Item> {
+pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Option<M2Item> {
     let path = uri.to_file_path().expect("Should be valid file path");
     let path = path.to_str()?;
     let content = std::fs::read_to_string(path).expect("Should have been able to read the file");
-    get_item_from_pos(&content, uri, pos)
+    get_item_from_pos(index, &content, uri, pos)
 }
 
-fn get_item_from_pos(content: &str, uri: &Url, pos: Position) -> Option<M2Item> {
+fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -> Option<M2Item> {
     let path = uri.to_file_path().expect("Should be valid file path");
     let path = path.to_str()?;
     let tag = get_xml_tag_at_pos(content, pos)?;
@@ -63,6 +65,14 @@ fn get_item_from_pos(content: &str, uri: &Url, pos: Position) -> Option<M2Item> 
             match xsi_type.as_str() {
                 "object" => Some(get_class_item_from_str(text)),
                 "init_parameter" => try_const_item_from_str(text),
+                "string" => {
+                    if tag.attributes.get("name") == Some(&"component".to_string()) {
+                        let text = js::resolve_component_text(index, text)?;
+                        js::text_to_component(index, text, uri)
+                    } else {
+                        try_any_item_from_str(text, is_frontend_location(path))
+                    }
+                }
                 _ => try_any_item_from_str(text, is_frontend_location(path)),
             }
         }
@@ -243,7 +253,8 @@ mod test {
         let pos = Position { line, character };
         let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
             .unwrap();
-        get_item_from_pos(&xml.replace('|', ""), &uri, pos)
+        let index = Indexer::new(Url::from_file_path("/a/b/c").ok()?);
+        get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
     }
 
     #[test]
