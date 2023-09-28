@@ -88,14 +88,14 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
     None
 }
 
-fn resolve_component_text(index: &Indexer, text: &str) -> Option<String> {
+pub fn resolve_component_text(index: &Indexer, text: &str) -> Option<String> {
     index.get_component_map(text).map_or_else(
         || Some(text.to_string()),
         |t| resolve_component_text(index, t),
     )
 }
 
-fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item> {
+pub fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
     if begining.chars().next().unwrap_or('a') == '.' {

@@ -89,7 +89,7 @@ impl Indexer {
         let file_path = uri.to_file_path().expect("Should be valid file path");
         match file_path.extension()?.to_str()?.to_lowercase().as_str() {
             "js" => js::get_item_from_position(self, uri, pos),
-            "xml" => xml::get_item_from_position(uri, pos),
+            "xml" => xml::get_item_from_position(self, uri, pos),
             _ => None,
         }
     }
