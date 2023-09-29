@@ -6,7 +6,7 @@ mod php;
 mod ts;
 mod xml;
 
-use std::{env, error::Error};
+use std::error::Error;
 
 use anyhow::{Context, Result};
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
@@ -48,16 +48,20 @@ fn main_loop(
     let params: InitializeParams =
         serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
-    let root_uri = match params.root_uri {
-        Some(uri) => uri,
-        None => lsp_types::Url::from_file_path(env::current_dir()?).map_or_else(
-            |_e| panic!("Couldn't determine current directory as a URL"),
-            |url| url,
-        ),
+    let indexer = Indexer::new().into_arc();
+    let mut threads = vec![];
+
+    if let Some(uri) = params.root_uri {
+        let path = uri.to_file_path().expect("Invalid root path");
+        threads.extend(Indexer::update_index(&indexer, &path));
     };
 
-    let indexer = Indexer::new(root_uri).into_arc();
-    let threads = Indexer::update_index(&indexer);
+    if let Some(folders) = params.workspace_folders {
+        for folder in folders {
+            let path = folder.uri.to_file_path().expect("Invalid workspace path");
+            threads.extend(Indexer::update_index(&indexer, &path));
+        }
+    }
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {

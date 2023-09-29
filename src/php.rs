@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use convert_case::{Case, Casing};
 use glob::glob;
@@ -81,13 +84,9 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn update_index(index: &ArcIndexer) {
+pub fn update_index(index: &ArcIndexer, path: &Path) {
     let modules = glob(
-        index
-            .lock()
-            .expect("Should be able to lock index")
-            .root_path()
-            .join("**/registration.php")
+        path.join("**/registration.php")
             .to_str()
             .expect("Path should be in valid encoding"),
     )

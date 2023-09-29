@@ -42,20 +42,19 @@ pub fn get_location_from_params(
             }
         }
         Some(M2Item::Component(comp)) => {
-            let mut path = Indexer::lock(index)
-                .root_path()
-                .join("lib")
-                .join("web")
-                .join(comp);
-            path.set_extension("js");
-            if path.exists() {
-                Some(vec![Location {
-                    uri: Url::from_file_path(path).expect("Should be valid url"),
-                    range: Range::default(),
-                }])
-            } else {
-                None
+            let mut result = vec![];
+            let workspace_paths = Indexer::lock(index).workspace_paths();
+            for path in workspace_paths {
+                let mut path = path.join("lib").join("web").join(&comp);
+                path.set_extension("js");
+                if path.exists() {
+                    result.push(Location {
+                        uri: Url::from_file_path(path).expect("Should be valid url"),
+                        range: Range::default(),
+                    });
+                }
             }
+            Some(result)
         }
         Some(M2Item::AdminPhtml(mod_name, template)) => {
             let mut result = vec![];
