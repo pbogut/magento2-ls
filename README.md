@@ -7,6 +7,9 @@ The Magento 2 Language Server is a tool that serves as a connection between Mage
 Please note that the current version of the language server is considered to be of alpha quality. Although it is functional and can be used, it has limited functionality and may encounter issues. It has been tested on Linux and should also work on MacOS and Windows.
 
 ## Features
+
+![go-to-definition](https://github.com/pbogut/magento2-ls/assets/1702152/20f556a8-5024-4a1b-befd-26ef1ded6000)
+
 - Go to the definition from XML files:
    - Go to the class (from `<plugin/>`, `<observer/>`, `<argument xsi:type="object"/>`, etc.)
    - Go to the constant (from `<argument xsi:type="init_parameter"/>`)
