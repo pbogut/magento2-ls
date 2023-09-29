@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard},
     thread::{spawn, JoinHandle},
     time::SystemTime,
@@ -17,21 +17,21 @@ pub struct Indexer {
     magento_admin_themes: HashMap<String, PathBuf>,
     js_maps: HashMap<String, String>,
     js_mixins: HashMap<String, String>,
-    root_uri: Url,
+    workspaces: Vec<PathBuf>,
 }
 
 #[allow(clippy::module_name_repetitions)]
 pub type ArcIndexer = Arc<Mutex<Indexer>>;
 
 impl Indexer {
-    pub fn new(root_uri: Url) -> Self {
+    pub fn new() -> Self {
         Self {
             magento_modules: HashMap::new(),
             magento_front_themes: HashMap::new(),
             magento_admin_themes: HashMap::new(),
             js_maps: HashMap::new(),
             js_mixins: HashMap::new(),
-            root_uri,
+            workspaces: vec![],
         }
     }
 
@@ -81,8 +81,16 @@ impl Indexer {
             .collect::<Vec<&PathBuf>>()
     }
 
-    pub fn root_path(&self) -> PathBuf {
-        self.root_uri.to_file_path().expect("Invalid root path")
+    pub fn workspace_paths(&self) -> Vec<PathBuf> {
+        self.workspaces.clone()
+    }
+
+    pub fn add_workspace_path(&mut self, path: &Path) {
+        self.workspaces.push(path.to_path_buf());
+    }
+
+    pub fn has_workspace_path(&mut self, path: &Path) -> bool {
+        self.workspaces.contains(&path.to_path_buf())
     }
 
     pub fn get_item_from_position(&self, uri: &Url, pos: Position) -> Option<M2Item> {
@@ -98,11 +106,17 @@ impl Indexer {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn update_index(index: &ArcIndexer) -> Vec<JoinHandle<()>> {
-        vec![
-            spawn_index(index, php::update_index, "PHP Indexing"),
-            spawn_index(index, js::update_index, "JS Indexing"),
-        ]
+    pub fn update_index(arc_index: &ArcIndexer, path: &Path) -> Vec<JoinHandle<()>> {
+        let mut lock = Self::lock(arc_index);
+        if lock.has_workspace_path(path) {
+            vec![]
+        } else {
+            lock.add_workspace_path(path);
+            vec![
+                spawn_index(arc_index, path, php::update_index, "PHP Indexing"),
+                spawn_index(arc_index, path, js::update_index, "JS Indexing"),
+            ]
+        }
     }
 
     pub fn lock(arc_indexer: &ArcIndexer) -> MutexGuard<Self> {
@@ -110,14 +124,20 @@ impl Indexer {
     }
 }
 
-fn spawn_index(arc_indexer: &ArcIndexer, callback: fn(&ArcIndexer), msg: &str) -> JoinHandle<()> {
+fn spawn_index(
+    arc_indexer: &ArcIndexer,
+    path: &Path,
+    callback: fn(&ArcIndexer, &Path),
+    msg: &str,
+) -> JoinHandle<()> {
     let index = Arc::clone(arc_indexer);
+    let path = path.to_path_buf();
     let msg = msg.to_owned();
 
     spawn(move || {
         eprintln!("Start {}", msg);
         let index_start = SystemTime::now();
-        callback(&index);
+        callback(&index, &path);
         index_start.elapsed().map_or_else(
             |_| eprintln!("{} done", msg),
             |d| eprintln!("{} done in {:?}", msg, d),

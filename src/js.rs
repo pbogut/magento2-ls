@@ -16,13 +16,9 @@ enum JSTypes {
     Mixins,
 }
 
-pub fn update_index(index: &ArcIndexer) {
+pub fn update_index(index: &ArcIndexer, path: &Path) {
     let modules = glob(
-        index
-            .lock()
-            .expect("Should be able to lock index")
-            .root_path()
-            .join("**/requirejs-config.js")
+        path.join("**/requirejs-config.js")
             .to_str()
             .expect("Path should be in valid encoding"),
     )
@@ -225,7 +221,7 @@ mod test {
 
     #[test]
     fn test_update_index_from_config() {
-        let index = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
+        let index = Indexer::new();
         let content = r#"
         var config = {
             map: {
@@ -254,7 +250,7 @@ mod test {
         let arc_index = index.into_arc();
         update_index_from_config(&arc_index, content);
 
-        let mut result = Indexer::new(Url::from_file_path("/a/b/c").unwrap());
+        let mut result = Indexer::new();
         result.add_component_map(
             "other/core/extension",
             "Other_Module/js/core_ext".to_string(),
@@ -331,7 +327,7 @@ mod test {
         let pos = Position { line, character };
         let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
             .unwrap();
-        let mut index = Indexer::new(Url::from_file_path("/a/b/c").ok()?);
+        let mut index = Indexer::new();
         index.add_module_path("Some_Module", PathBuf::from("/a/b/c/Some_Module"));
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
     }

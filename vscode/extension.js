@@ -1,4 +1,5 @@
 // @ts-check
+const { workspace } = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 
 module.exports = {
@@ -28,6 +29,12 @@ module.exports = {
       serverOptions,
       clientOptions,
     );
+
+    workspace.onDidChangeWorkspaceFolders((_event) => {
+      // TODO implement `workspace/didChangeWorkspaceFolders` in the server.
+      // For now just restart server when workspace folders change
+      client.restart();
+    });
 
     client.start();
   },

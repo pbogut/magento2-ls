@@ -253,7 +253,7 @@ mod test {
         let pos = Position { line, character };
         let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
             .unwrap();
-        let index = Indexer::new(Url::from_file_path("/a/b/c").ok()?);
+        let index = Indexer::new();
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
     }
 
