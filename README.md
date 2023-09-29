@@ -2,16 +2,19 @@
 
 ## Overview
 
-The Magento 2 Language Server is a tool that serves as a connection between Magento 2 XML and PHP files. It offers features like navigating to the definition of PHP classes from XML definitions of plugins, observers, jobs, and other similar entities. The objective is to also offer code completion suggestions in XML files when referring to PHP classes and functions, and potentially identifying references of PHP classes/methods in XML in the future.
+The Magento 2 Language Server is a tool that serves as a connection between Magento 2 XML, JS and PHP files, with the goal of enabling easier navigation between these files.
 
 Please note that the current version of the language server is considered to be of alpha quality. Although it is functional and can be used, it has limited functionality and may encounter issues. It has been tested on Linux and should also work on MacOS and Windows.
 
 ## Features
- - Jump to definition from XML files:
-   - Jump to class (from `<plugin/>`, `<observer/>`, `<argument xsi:type="object"/>`, etc.)
-   - Jump to constant (from `<argument xsi:type="init_parameter"/>`)
-   - Jump to method (from `<service/>`, `<job/>`)
-   - Jump to template file (from `<block/>`, `<referenceBlock/>`, etc.)
+- Go to the definition from XML files:
+   - Go to the class (from `<plugin/>`, `<observer/>`, `<argument xsi:type="object"/>`, etc.)
+   - Go to the constant (from `<argument xsi:type="init_parameter"/>`)
+   - Go to the method (from `<service/>`, `<job/>`)
+   - Go to the template file (from `<block/>`, `<referenceBlock/>`, etc.)
+   - Go to the JavaScript component file (from `<item name="component" xsi:type="string"/>`)
+ - Go to the definition from JS files:
+   - Go to the JavaScript component file (from `define()` argument list)
 
 ### Planned (not implemented yet)
  - Code completion suggestions in XML files when referencing PHP classes and functions.
