@@ -17,7 +17,8 @@
   },
   "icon": "logo.png",
   "activationEvents": [
-    "onLanguage:xml"
+    "onLanguage:xml",
+    "onLanguage:javascript"
   ],
   "main": "./extension",
   "dependencies": {

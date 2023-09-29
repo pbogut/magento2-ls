@@ -20,7 +20,10 @@ module.exports = {
 
     /** @type {import("vscode-languageclient/node").LanguageClientOptions} */
     const clientOptions = {
-      documentSelector: [{ scheme: "file", language: "xml" }],
+      documentSelector: [
+        { scheme: "file", language: "xml" },
+        { scheme: "file", language: "javascript" },
+      ],
     };
 
     const client = new LanguageClient(
