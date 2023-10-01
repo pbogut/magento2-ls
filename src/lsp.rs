@@ -1,13 +1,32 @@
 use std::{path::PathBuf, sync::MutexGuard};
 
-use lsp_types::{GotoDefinitionParams, Location, Range, Url};
+use lsp_types::{
+    CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Location, Range, Url,
+};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
     js,
-    m2_types::M2Item,
+    m2_types::{M2Item, M2Path},
     php::{self, PHPClass},
+    xml,
 };
+
+pub fn completion_handler(indexer: &ArcIndexer, params: CompletionParams) -> CompletionResponse {
+    CompletionResponse::Array(
+        get_completion_from_params(indexer, params).map_or(vec![], |loc_list| loc_list),
+    )
+}
+
+pub fn definition_handler(
+    indexer: &ArcIndexer,
+    params: GotoDefinitionParams,
+) -> GotoDefinitionResponse {
+    GotoDefinitionResponse::Array(
+        get_location_from_params(indexer, params).map_or(vec![], |loc_list| loc_list),
+    )
+}
 
 pub fn get_location_from_params(
     index: &ArcIndexer,
@@ -60,11 +79,14 @@ pub fn get_location_from_params(
             let mut result = vec![];
             let mod_path = Indexer::lock(index).get_module_path(&mod_name);
             if let Some(path) = mod_path {
-                let templ_path = path
-                    .join("view")
-                    .join("adminhtml")
-                    .join("templates")
-                    .join(&template);
+                let templ_path = path.append(&["view", "adminhtml", "templates", &template]);
+                if templ_path.is_file() {
+                    result.push(Location {
+                        uri: Url::from_file_path(templ_path).expect("Should be valid Url"),
+                        range: Range::default(),
+                    });
+                }
+                let templ_path = path.append(&["view", "base", "templates", &template]);
                 if templ_path.is_file() {
                     result.push(Location {
                         uri: Url::from_file_path(templ_path).expect("Should be valid Url"),
@@ -90,11 +112,7 @@ pub fn get_location_from_params(
             let mut result = vec![];
             let mod_path = Indexer::lock(index).get_module_path(&mod_name);
             if let Some(path) = mod_path {
-                let templ_path = path
-                    .join("view")
-                    .join("frontend")
-                    .join("templates")
-                    .join(&template);
+                let templ_path = path.append(&["view", "frontend", "templates", &template]);
                 if templ_path.is_file() {
                     result.push(Location {
                         uri: Url::from_file_path(templ_path).expect("Should be valid Url"),
@@ -147,6 +165,84 @@ pub fn get_location_from_params(
     }
 }
 
+pub fn get_completion_from_params(
+    index: &ArcIndexer,
+    params: CompletionParams,
+) -> Option<Vec<CompletionItem>> {
+    let uri = params.text_document_position.text_document.uri;
+    let pos = params.text_document_position.position;
+    let content = Indexer::lock(index).get_file(&uri)?.clone();
+
+    if uri.is_xml() {
+        let xml_completion =
+            xml::get_current_position_path(&content, pos, &xml::PathDepth::Attribute)?;
+
+        match xml_completion.path.as_str() {
+            "[@template]" => {
+                completion_for_template(index, &xml_completion.text, uri.is_frontend())
+            }
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn completion_for_template(
+    index: &ArcIndexer,
+    text: &str,
+    is_frontend: bool,
+) -> Option<Vec<CompletionItem>> {
+    if text.is_empty() || is_part_of_module_name(text) {
+        Some(
+            Indexer::lock(index)
+                .get_modules()
+                .iter()
+                .map(|module| CompletionItem {
+                    label: module.clone(),
+                    label_details: None,
+                    kind: Some(CompletionItemKind::MODULE),
+                    detail: None,
+                    ..CompletionItem::default()
+                })
+                .collect(),
+        )
+    } else if text.contains("::") {
+        let module_name = text.split("::").next()?;
+        let path = Indexer::lock(index).get_module_path(module_name);
+        match path {
+            None => None,
+            Some(path) => {
+                let view_path = path.append(&[
+                    "view",
+                    if is_frontend { "frontend" } else { "adminhtml" },
+                    "templates",
+                ]);
+                let glob_path = view_path.append(&["**", "*.phtml"]);
+                let glob_path = glob_path.to_str().unwrap_or_default();
+                let view_path = view_path.to_str().unwrap_or_default();
+                Some(
+                    glob::glob(glob_path)
+                        .ok()?
+                        .map(|file| CompletionItem {
+                            label: file
+                                .unwrap_or_default()
+                                .relative_to(view_path)
+                                .to_path_string(),
+                            label_details: None,
+                            kind: Some(CompletionItemKind::FILE),
+                            detail: None,
+                            ..CompletionItem::default()
+                        })
+                        .collect(),
+                )
+            }
+        }
+    } else {
+        None
+    }
+}
+
 fn get_php_class_from_class_name(index: &MutexGuard<Indexer>, class: &str) -> Option<PHPClass> {
     let module_path = get_module_path(index, class);
     match module_path {
@@ -184,4 +280,17 @@ fn get_module_path(index: &MutexGuard<Indexer>, class: &str) -> Option<(PathBuf,
     }
 
     None
+}
+
+fn is_part_of_module_name(text: &str) -> bool {
+    text.chars()
+        .reduce(|a, b| {
+            if b.is_alphanumeric() || b == '_' && (a != 'N') {
+                'Y'
+            } else {
+                'N'
+            }
+        })
+        .unwrap_or_default()
+        == 'Y'
 }

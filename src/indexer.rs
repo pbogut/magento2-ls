@@ -12,7 +12,9 @@ use crate::{js, m2_types::M2Item, php, xml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Indexer {
-    magento_modules: HashMap<String, PathBuf>,
+    buffers: HashMap<Url, String>,
+    magento_modules: Vec<String>,
+    magento_module_paths: HashMap<String, PathBuf>,
     magento_front_themes: HashMap<String, PathBuf>,
     magento_admin_themes: HashMap<String, PathBuf>,
     js_maps: HashMap<String, String>,
@@ -26,7 +28,9 @@ pub type ArcIndexer = Arc<Mutex<Indexer>>;
 impl Indexer {
     pub fn new() -> Self {
         Self {
-            magento_modules: HashMap::new(),
+            buffers: HashMap::new(),
+            magento_modules: vec![],
+            magento_module_paths: HashMap::new(),
             magento_front_themes: HashMap::new(),
             magento_admin_themes: HashMap::new(),
             js_maps: HashMap::new(),
@@ -35,12 +39,36 @@ impl Indexer {
         }
     }
 
-    pub fn get_module_path(&self, module: &str) -> Option<PathBuf> {
-        self.magento_modules.get(module).cloned()
+    pub fn set_file<S>(&mut self, uri: &Url, content: S)
+    where
+        S: Into<String>,
+    {
+        self.buffers.insert(uri.clone(), content.into());
     }
 
-    pub fn add_module_path(&mut self, module: &str, path: PathBuf) {
-        self.magento_modules.insert(module.to_string(), path);
+    pub fn get_file(&self, uri: &Url) -> Option<&String> {
+        self.buffers.get(uri)
+    }
+
+    pub fn get_modules(&self) -> Vec<String> {
+        let mut modules = self.magento_modules.clone();
+        modules.sort_unstable();
+        modules.dedup();
+        modules
+    }
+
+    pub fn get_module_path(&self, module: &str) -> Option<PathBuf> {
+        self.magento_module_paths.get(module).cloned()
+    }
+
+    pub fn add_module(&mut self, module: &str) -> &mut Self {
+        self.magento_modules.push(module.to_string());
+        self
+    }
+
+    pub fn add_module_path(&mut self, module: &str, path: PathBuf) -> &mut Self {
+        self.magento_module_paths.insert(module.to_string(), path);
+        self
     }
 
     pub fn add_admin_theme_path(&mut self, name: &str, path: PathBuf) {

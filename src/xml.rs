@@ -1,12 +1,12 @@
 use lsp_types::{Position, Url};
 use std::{collections::HashMap, path::Path};
-use tree_sitter::{Query, QueryCursor};
+use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
     indexer::Indexer,
     js,
     m2_types::M2Item,
-    ts::{get_node_text, node_at_position},
+    ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,22 @@ enum XmlPart {
     Text,
     Attribute(String),
     None,
+}
+
+#[derive(Debug, Clone)]
+pub enum PathDepth {
+    #[allow(dead_code)]
+    Any,
+    Attribute,
+    #[allow(dead_code)]
+    Tags(usize),
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmlCompletion {
+    pub path: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +49,98 @@ impl XmlTag {
             hover_on: XmlPart::None,
         }
     }
+}
+
+pub fn get_current_position_path(
+    content: &str,
+    pos: Position,
+    depth: &PathDepth,
+) -> Option<XmlCompletion> {
+    let query_string = "
+        (tag_name) @tag_name
+        (attribute_value) @attr_val
+    ";
+
+    let tree = tree_sitter_parsers::parse(content, "html");
+    let query = Query::new(tree.language(), query_string)
+        .map_err(|e| eprintln!("Error creating query: {:?}", e))
+        .expect("Error creating query");
+    let mut cursor = QueryCursor::new();
+    let captures = cursor.captures(&query, tree.root_node(), content.as_bytes());
+    for (m, _) in captures {
+        let node = m.captures[0].node;
+        if node_at_position(node, pos) {
+            let path = node_to_path(node, content, depth)?;
+            let text = get_node_text_before_pos(node, content, pos);
+            return Some(XmlCompletion { path, text });
+        }
+    }
+    None
+}
+
+fn node_walk_back(node: Node) -> Option<Node> {
+    node.prev_sibling().map_or_else(|| node.parent(), Some)
+}
+
+fn node_to_path(node: Node, content: &str, depth: &PathDepth) -> Option<String> {
+    let mut path = vec![];
+    let mut current_node = node;
+    let mut has_attr = false;
+    let mut tags_count = 0;
+    let mut node_ids = vec![];
+    while let Some(node) = node_walk_back(current_node) {
+        current_node = node;
+        if node_ids.contains(&node.id()) {
+            continue;
+        }
+        node_ids.push(node.id());
+        if node.kind() == "attribute_name" && !has_attr {
+            has_attr = true;
+            let attr_name = get_node_text(node, content);
+            path.push((node.kind(), attr_name));
+        } else if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
+            if node.child(0).is_some() {
+                if node_ids.contains(&node.child(0)?.id()) {
+                    continue;
+                }
+                path.push((node.kind(), get_node_text(node.child(1)?, content)));
+                tags_count += 1;
+            }
+        } else if node.kind() == "tag_name" {
+            path.push((node.kind(), get_node_text(node, content)));
+            tags_count += 1;
+        }
+
+        match depth {
+            PathDepth::Any => (),
+            PathDepth::Attribute => {
+                if has_attr {
+                    break;
+                }
+            }
+            PathDepth::Tags(level) => {
+                if tags_count == *level {
+                    break;
+                }
+            }
+        }
+    }
+    let text = get_node_text(node, content);
+    eprintln!("text: >{}<", text);
+    path.reverse();
+    eprintln!("path: {:?}", path);
+    let mut result = String::new();
+    for (kind, name) in path {
+        match kind {
+            "attribute_name" => result.push_str(&format!("[@{}]", name)),
+            "self_closing_tag" | "start_tag" | "tag_name" => {
+                result.push_str(&format!("/{}", &name));
+            }
+
+            _ => (),
+        }
+    }
+    Some(result)
 }
 
 pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Option<M2Item> {
@@ -239,8 +347,7 @@ mod test {
     use super::*;
     use std::path::PathBuf;
 
-    fn get_test_item(xml: &str, path: &str) -> Option<M2Item> {
-        let win_path = format!("c:{}", path.replace('/', "\\"));
+    fn get_position_from_test_xml(xml: &str) -> Position {
         let mut character = 0;
         let mut line = 0;
         for l in xml.lines() {
@@ -250,7 +357,17 @@ mod test {
             }
             line += 1;
         }
-        let pos = Position { line, character };
+        Position { line, character }
+    }
+
+    fn get_test_position_path(xml: &str, depth: &PathDepth) -> Option<XmlCompletion> {
+        let pos = get_position_from_test_xml(xml);
+        get_current_position_path(&xml.replace('|', ""), pos, depth)
+    }
+
+    fn get_test_item_from_pos(xml: &str, path: &str) -> Option<M2Item> {
+        let win_path = format!("c:{}", path.replace('/', "\\"));
+        let pos = get_position_from_test_xml(xml);
         let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
             .unwrap();
         let index = Indexer::new();
@@ -259,14 +376,14 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_class_in_tag_text() {
-        let item = get_test_item(r#"<?xml version="1.0"?><item>|A\B\C</item>"#, "/a/b/c");
+        let item = get_test_item_from_pos(r#"<?xml version="1.0"?><item>|A\B\C</item>"#, "/a/b/c");
 
         assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())));
     }
 
     #[test]
     fn test_get_item_from_pos_template_in_tag_attribute() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><block template="Some_|Module::path/to/file.phtml"></block>"#,
             "/a/b/c",
         );
@@ -281,7 +398,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_frontend_template_in_tag_attribute() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><block template="Some_Module::path/t|o/file.phtml"></block>"#,
             "/a/view/frontend/c",
         );
@@ -296,7 +413,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_method_in_job_tag_attribute() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><job instance="\A\B\C\" method="met|Hod"></job>"#,
             "/a/a/c",
         );
@@ -308,7 +425,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_method_in_service_tag_attribute() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><service class="A\B\C\" method="met|Hod"></service>"#,
             "/a/a/c",
         );
@@ -320,7 +437,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_class_in_service_tag_attribute() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><service class="\|A\B\C" method="metHod">xx</service>"#,
             "/a/a/c",
         );
@@ -332,7 +449,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_attribute_in_tag_with_method() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><service something="\|A\B\C" method="metHod">xx</service>"#,
             "/a/a/c",
         );
@@ -341,13 +458,13 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_class_in_text_in_tag() {
-        let item = get_test_item(r#"<?xml version="1.0"?><some>|A\B\C</some>"#, "/a/a/c");
+        let item = get_test_item_from_pos(r#"<?xml version="1.0"?><some>|A\B\C</some>"#, "/a/a/c");
         assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())));
     }
 
     #[test]
     fn test_get_item_from_pos_const_in_text_in_tag() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><some>\|A\B\C::CONST_ANT</some>"#,
             "/a/a/c",
         );
@@ -362,7 +479,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_template_in_text_in_tag() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><some>Some_Module::fi|le.phtml</some>"#,
             "/a/a/c",
         );
@@ -377,7 +494,7 @@ mod test {
 
     #[test]
     fn test_get_item_from_pos_method_attribute_in_tag() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><service something="\A\B\C" method="met|Hod">xx</service>"#,
             "/a/a/c",
         );
@@ -386,7 +503,7 @@ mod test {
 
     #[test]
     fn test_should_get_most_inner_tag_from_nested() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version=\"1.0\"?>
                 <type name="Magento\Elasticsearch\Model\Adapter\BatchDataMapper\ProductDataMapper">
                     <arguments>
@@ -406,12 +523,56 @@ mod test {
 
     #[test]
     fn test_should_get_class_from_class_attribute_of_block_tag() {
-        let item = get_test_item(
+        let item = get_test_item_from_pos(
             r#"<?xml version=\"1.0\"?>
                <block class="A\|B\C" name="some_name" template="Some_Module::temp/file.phtml"/>
             "#,
             "/a/a/c",
         );
         assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())))
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_starting_attribute() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+                <ala/>
+                <type name="Klaviyo\Reclaim\Observer\SaveOrderMarketingConsent">
+                    <plugin name="pharmacy_klaviyo_set_consent_and_subscribe"
+                        template="Mo|du
+            "#,
+            &PathDepth::Any,
+        );
+        assert_eq!(
+            item,
+            Some(XmlCompletion {
+                path: "/config/type/plugin[@template]".to_string(),
+                text: "Mo".to_string()
+            })
+        )
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_starting_attribute_inside_tag() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block template="Modu|le
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+            &PathDepth::Any,
+        );
+        assert_eq!(
+            item,
+            Some(XmlCompletion {
+                path: "/config/type/block[@template]".into(),
+                text: "Modu".into()
+            })
+        )
     }
 }
