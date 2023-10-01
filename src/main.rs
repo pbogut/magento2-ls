@@ -1,7 +1,7 @@
 mod indexer;
 mod js;
 mod lsp;
-mod m2_types;
+mod m2;
 mod php;
 mod ts;
 mod xml;
@@ -16,7 +16,7 @@ use lsp_types::{
     TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
 };
 
-use crate::{indexer::Indexer, m2_types::M2Uri};
+use crate::{indexer::Indexer, m2::M2Uri};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Note that  we must have our logging only write out to stderr.

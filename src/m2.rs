@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use lsp_types::Url;
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum M2Item {
     Component(String),
@@ -15,6 +16,7 @@ pub enum M2Item {
     BasePhtml(String, String),
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub enum M2Area {
     Frontend,
     Adminhtml,
@@ -44,10 +46,12 @@ impl ToString for M2Area {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait M2Uri {
     fn to_path_buf(&self) -> PathBuf;
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait M2Path {
     fn has_components(&self, parts: &[&str]) -> bool;
     fn relative_to<P: AsRef<Path>>(&self, base: P) -> PathBuf;
@@ -150,7 +154,7 @@ impl M2Uri for Url {
 
 #[cfg(test)]
 mod test {
-    use crate::m2_types::M2Path;
+    use crate::m2::M2Path;
 
     #[test]
     fn test_has_components_when_components_in_the_middle() {

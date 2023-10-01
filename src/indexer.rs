@@ -9,7 +9,7 @@ use std::{
 use lsp_types::Position;
 use parking_lot::Mutex;
 
-use crate::{js, m2_types::M2Item, php, xml};
+use crate::{js, m2::M2Item, php, xml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Indexer {
