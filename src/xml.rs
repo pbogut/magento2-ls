@@ -5,7 +5,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 use crate::{
     indexer::Indexer,
     js,
-    m2_types::M2Item,
+    m2_types::{M2Area, M2Item, M2Path},
     ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 
@@ -125,10 +125,7 @@ fn node_to_path(node: Node, content: &str, depth: &PathDepth) -> Option<String> 
             }
         }
     }
-    let text = get_node_text(node, content);
-    eprintln!("text: >{}<", text);
     path.reverse();
-    eprintln!("path: {:?}", path);
     let mut result = String::new();
     for (kind, name) in path {
         match kind {
@@ -152,18 +149,15 @@ pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Opti
 
 fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -> Option<M2Item> {
     let path = uri.to_file_path().expect("Should be valid file path");
-    let path = path.to_str()?;
     let tag = get_xml_tag_at_pos(content, pos)?;
 
     match tag.hover_on {
         XmlPart::Attribute(ref attr_name) => match attr_name.as_str() {
             "method" | "instance" | "class" => try_method_item_from_tag(&tag).or_else(|| {
-                try_any_item_from_str(tag.attributes.get(attr_name)?, is_frontend_location(path))
+                try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area())
             }),
-            "template" => {
-                try_phtml_item_from_str(tag.attributes.get(attr_name)?, is_frontend_location(path))
-            }
-            _ => try_any_item_from_str(tag.attributes.get(attr_name)?, is_frontend_location(path)),
+            "template" => try_phtml_item_from_str(tag.attributes.get(attr_name)?, &path.get_area()),
+            _ => try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area()),
         },
         XmlPart::Text => {
             let text = tag.text.trim_matches('\\');
@@ -178,10 +172,10 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
                         let text = js::resolve_component_text(index, text)?;
                         js::text_to_component(index, text, uri)
                     } else {
-                        try_any_item_from_str(text, is_frontend_location(path))
+                        try_any_item_from_str(text, &path.get_area())
                     }
                 }
-                _ => try_any_item_from_str(text, is_frontend_location(path)),
+                _ => try_any_item_from_str(text, &path.get_area()),
             }
         }
         XmlPart::None => None,
@@ -266,9 +260,9 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
     }
 }
 
-fn try_any_item_from_str(text: &str, is_frontend: bool) -> Option<M2Item> {
+fn try_any_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
     if does_ext_eq(text, "phtml") {
-        try_phtml_item_from_str(text, is_frontend)
+        try_phtml_item_from_str(text, area)
     } else if text.contains("::") {
         try_const_item_from_str(text)
     } else if text.chars().next()?.is_uppercase() {
@@ -294,19 +288,23 @@ fn get_class_item_from_str(text: &str) -> M2Item {
     M2Item::Class(text.to_string())
 }
 
-fn try_phtml_item_from_str(text: &str, is_frontend: bool) -> Option<M2Item> {
+fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
     if text.split("::").count() == 2 {
         let mut parts = text.split("::");
-        if is_frontend {
-            Some(M2Item::FrontPhtml(
+        match area {
+            M2Area::Frontend => Some(M2Item::FrontPhtml(
                 parts.next()?.to_string(),
                 parts.next()?.to_string(),
-            ))
-        } else {
-            Some(M2Item::AdminPhtml(
+            )),
+            M2Area::Adminhtml => Some(M2Item::AdminPhtml(
                 parts.next()?.to_string(),
                 parts.next()?.to_string(),
-            ))
+            )),
+            M2Area::Base => Some(M2Item::BasePhtml(
+                parts.next()?.to_string(),
+                parts.next()?.to_string(),
+            )),
+            M2Area::Unknown => None,
         }
     } else {
         None
@@ -327,13 +325,6 @@ fn try_method_item_from_tag(tag: &XmlTag) -> Option<M2Item> {
     } else {
         None
     }
-}
-
-fn is_frontend_location(path: &str) -> bool {
-    path.contains("\\view\\frontend\\")
-        || path.contains("/view/frontend/")
-        || path.contains("\\app\\design\\frontend\\")
-        || path.contains("app/design/frontend/")
 }
 
 fn does_ext_eq(path: &str, ext: &str) -> bool {
@@ -385,7 +376,7 @@ mod test {
     fn test_get_item_from_pos_template_in_tag_attribute() {
         let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><block template="Some_|Module::path/to/file.phtml"></block>"#,
-            "/a/b/c",
+            "/a/design/adminhtml/c",
         );
         assert_eq!(
             item,
@@ -481,7 +472,7 @@ mod test {
     fn test_get_item_from_pos_template_in_text_in_tag() {
         let item = get_test_item_from_pos(
             r#"<?xml version="1.0"?><some>Some_Module::fi|le.phtml</some>"#,
-            "/a/a/c",
+            "/a/view/adminhtml/c",
         );
         assert_eq!(
             item,

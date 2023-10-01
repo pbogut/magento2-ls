@@ -37,19 +37,6 @@ pub fn update_index(index: &ArcIndexer, path: &Path) {
     }
 }
 
-pub fn make_web_uris(root: &Path, path: &Path) -> Vec<Url> {
-    let mut result = vec![];
-    for area in ["base", "frontend", "backend"] {
-        let mut maybe_file = root.join("view").join(area).join("web").join(path);
-        maybe_file.set_extension("js");
-        if maybe_file.exists() {
-            result.push(Url::from_file_path(&maybe_file).expect("Should be valid url"));
-        }
-    }
-
-    result
-}
-
 pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Option<M2Item> {
     let path = uri.to_file_path().expect("Should be valid file path");
     let path = path.to_str()?;
