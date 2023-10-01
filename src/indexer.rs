@@ -146,6 +146,25 @@ impl Indexer {
             ]
         }
     }
+
+    pub fn split_class_to_path_and_suffix(&self, class: &str) -> Option<(PathBuf, Vec<String>)> {
+        let mut parts = class.split('\\').collect::<Vec<_>>();
+        let mut suffix = vec![];
+
+        while let Some(part) = parts.pop() {
+            suffix.push(part.to_string());
+            let prefix = parts.join("\\");
+            let module_path = self.get_module_path(&prefix);
+            match module_path {
+                Some(mod_path) => {
+                    suffix.reverse();
+                    return Some((mod_path, suffix));
+                }
+                None => continue,
+            }
+        }
+        None
+    }
 }
 
 fn spawn_index(

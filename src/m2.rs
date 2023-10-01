@@ -152,6 +152,19 @@ impl M2Uri for Url {
     }
 }
 
+pub fn is_part_of_module_name(text: &str) -> bool {
+    text.chars()
+        .reduce(|a, b| {
+            if b.is_alphanumeric() || b == '_' && (a != 'N') {
+                'Y'
+            } else {
+                'N'
+            }
+        })
+        .unwrap_or_default()
+        == 'Y'
+}
+
 #[cfg(test)]
 mod test {
     use crate::m2::M2Path;
