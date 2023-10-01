@@ -14,6 +14,51 @@ pub fn get_range_from_node(node: Node) -> Range {
     }
 }
 
+pub fn get_node_text_before_pos(node: Node, content: &str, pos: Position) -> String {
+    let text = node
+        .utf8_text(content.as_bytes())
+        .unwrap_or("")
+        .trim_matches('\\')
+        .to_string();
+
+    let node_start_pos = node.start_position();
+    let node_end_pos = node.end_position();
+
+    let text = if node_end_pos.row == node_start_pos.row {
+        text
+    } else {
+        let take_lines = pos.line as usize - node_start_pos.row;
+        text.split('\n')
+            .take(take_lines + 1)
+            .collect::<Vec<&str>>()
+            .join("\n")
+    };
+
+    if pos.line as usize == node_start_pos.row {
+        let end = pos.character as usize - node_start_pos.column;
+        text.chars().take(end).collect::<String>()
+    } else {
+        let mut trimed = false;
+        let mut lines = text
+            .split('\n')
+            .rev()
+            .map(|line| {
+                if trimed {
+                    line.to_owned()
+                } else {
+                    trimed = true;
+                    line.chars()
+                        .take(pos.character as usize)
+                        .collect::<String>()
+                }
+            })
+            .collect::<Vec<String>>();
+
+        lines.reverse();
+        lines.join("\n")
+    }
+}
+
 pub fn get_node_text(node: Node, content: &str) -> String {
     node.utf8_text(content.as_bytes())
         .unwrap_or("")

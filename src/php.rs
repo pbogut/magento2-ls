@@ -10,6 +10,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
+    m2_types::M2Path,
     ts::{get_node_text, get_range_from_node},
 };
 
@@ -104,6 +105,10 @@ pub fn update_index(index: &ArcIndexer, path: &Path) {
         moule_registration.map_or_else(
             |_e| panic!("buhu"),
             |file_path| {
+                if file_path.is_test() {
+                    return;
+                }
+
                 let content = std::fs::read_to_string(&file_path)
                     .expect("Should have been able to read the file");
 
@@ -121,9 +126,12 @@ pub fn update_index(index: &ArcIndexer, path: &Path) {
                             parent.pop();
 
                             Indexer::lock(index).add_module_path(mod_name, parent.clone());
+
                             match register_param_to_module(mod_name) {
                                 Some(M2Module::Module(m)) => {
-                                    Indexer::lock(index).add_module_path(&m, parent);
+                                    Indexer::lock(index)
+                                        .add_module(mod_name)
+                                        .add_module_path(&m, parent);
                                 }
                                 Some(M2Module::Library(l)) => {
                                     Indexer::lock(index).add_module_path(&l, parent);
