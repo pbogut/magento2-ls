@@ -32,14 +32,14 @@ pub fn get_location_from_params(
     index: &ArcIndexer,
     params: &GotoDefinitionParams,
 ) -> Option<Vec<Location>> {
-    let uri = params
+    let path = params
         .text_document_position_params
         .text_document
         .uri
-        .clone(); // TODO convert to PathBuf and propagate
+        .to_path_buf();
     let pos = params.text_document_position_params.position;
 
-    let item = index.lock().get_item_from_position(&uri, pos);
+    let item = index.lock().get_item_from_position(&path, pos);
     match item {
         Some(M2Item::ModComponent(_mod_name, file_path, mod_path)) => {
             let mut result = vec![];

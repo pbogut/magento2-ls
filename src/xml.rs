@@ -1,5 +1,8 @@
-use lsp_types::{Position, Url};
-use std::{collections::HashMap, path::Path};
+use lsp_types::Position;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
@@ -140,15 +143,17 @@ fn node_to_path(node: Node, content: &str, depth: &PathDepth) -> Option<String> 
     Some(result)
 }
 
-pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Option<M2Item> {
-    let path = uri.to_file_path().expect("Should be valid file path");
-    let path = path.to_str()?;
-    let content = std::fs::read_to_string(path).expect("Should have been able to read the file");
-    get_item_from_pos(index, &content, uri, pos)
+pub fn get_item_from_position(index: &Indexer, path: &PathBuf, pos: Position) -> Option<M2Item> {
+    let content = index.get_file(path)?;
+    get_item_from_pos(index, content, path, pos)
 }
 
-fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -> Option<M2Item> {
-    let path = uri.to_file_path().expect("Should be valid file path");
+fn get_item_from_pos(
+    index: &Indexer,
+    content: &str,
+    path: &PathBuf,
+    pos: Position,
+) -> Option<M2Item> {
     let tag = get_xml_tag_at_pos(content, pos)?;
 
     match tag.hover_on {
@@ -170,7 +175,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
                 "string" => {
                     if tag.attributes.get("name") == Some(&"component".to_string()) {
                         let text = js::resolve_component_text(index, text)?;
-                        js::text_to_component(index, text, uri)
+                        js::text_to_component(index, text, path)
                     } else {
                         try_any_item_from_str(text, &path.get_area())
                     }
@@ -359,8 +364,7 @@ mod test {
     fn get_test_item_from_pos(xml: &str, path: &str) -> Option<M2Item> {
         let win_path = format!("c:{}", path.replace('/', "\\"));
         let pos = get_position_from_test_xml(xml);
-        let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
-            .unwrap();
+        let uri = PathBuf::from(if cfg!(windows) { &win_path } else { path });
         let index = Indexer::new();
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
     }

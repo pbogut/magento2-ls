@@ -1,12 +1,12 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use glob::glob;
-use lsp_types::{Position, Url};
+use lsp_types::Position;
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
-    m2_types::M2Item,
+    m2_types::{M2Item, M2Path},
     ts::node_at_position,
 };
 
@@ -16,13 +16,9 @@ enum JSTypes {
     Mixins,
 }
 
-pub fn update_index(index: &ArcIndexer, path: &Path) {
-    let modules = glob(
-        path.join("**/requirejs-config.js")
-            .to_str()
-            .expect("Path should be in valid encoding"),
-    )
-    .expect("Failed to read glob pattern");
+pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
+    let modules = glob(&path.append(&["**", "requirejs-config.js"]).to_path_string())
+        .expect("Failed to read glob pattern");
 
     for require_config in modules {
         require_config.map_or_else(
@@ -37,14 +33,12 @@ pub fn update_index(index: &ArcIndexer, path: &Path) {
     }
 }
 
-pub fn get_item_from_position(index: &Indexer, uri: &Url, pos: Position) -> Option<M2Item> {
-    let path = uri.to_file_path().expect("Should be valid file path");
-    let path = path.to_str()?;
-    let content = std::fs::read_to_string(path).expect("Should have been able to read the file");
-    get_item_from_pos(index, &content, uri, pos)
+pub fn get_item_from_position(index: &Indexer, path: &PathBuf, pos: Position) -> Option<M2Item> {
+    let content = index.get_file(path)?;
+    get_item_from_pos(index, content, path, pos)
 }
 
-fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -> Option<M2Item> {
+fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position) -> Option<M2Item> {
     let query = r#"
     (
       (identifier) @def (#eq? @def define)
@@ -63,8 +57,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, uri: &Url, pos: Position) -
         if node_at_position(m.captures[1].node, pos) {
             let text = get_node_text(m.captures[1].node, content);
             let text = resolve_component_text(index, &text)?;
-
-            return text_to_component(index, text, uri);
+            return text_to_component(index, text, path);
         }
     }
 
@@ -78,11 +71,11 @@ pub fn resolve_component_text(index: &Indexer, text: &str) -> Option<String> {
     )
 }
 
-pub fn text_to_component(index: &Indexer, text: String, uri: &Url) -> Option<M2Item> {
+pub fn text_to_component(index: &Indexer, text: String, path: &Path) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
     if begining.chars().next().unwrap_or('a') == '.' {
-        let mut path = uri.to_file_path().expect("Should be valid file path");
+        let mut path = path.to_path_buf();
         path.pop();
         Some(M2Item::RelComponent(text, path))
     } else if text.split('/').count() > 1
@@ -312,8 +305,7 @@ mod test {
             line += 1;
         }
         let pos = Position { line, character };
-        let uri = Url::from_file_path(PathBuf::from(if cfg!(windows) { &win_path } else { path }))
-            .unwrap();
+        let uri = PathBuf::from(if cfg!(windows) { &win_path } else { path });
         let mut index = Indexer::new();
         index.add_module_path("Some_Module", PathBuf::from("/a/b/c/Some_Module"));
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
