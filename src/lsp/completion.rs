@@ -1,3 +1,5 @@
+mod events;
+
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams};
 
 use crate::{
@@ -19,11 +21,13 @@ pub fn get_completion_from_params(
     let content = index.lock().get_file(&uri)?.clone();
 
     if uri.is_xml() {
-        let xml_completion =
-            xml::get_current_position_path(&content, pos, &xml::PathDepth::Attribute)?;
+        let edit_path = xml::get_current_position_path(&content, pos, &xml::PathDepth::Any)?;
 
-        match xml_completion.path.as_str() {
-            "[@template]" => completion_for_template(index, &xml_completion.text, &uri.get_area()),
+        match edit_path.path {
+            p if p.ends_with("[@template]") => {
+                completion_for_template(index, &edit_path.text, &uri.get_area())
+            }
+            p if p.ends_with("/event/observer[@name]") => Some(events::get_completion_items()),
             _ => None,
         }
     } else {
