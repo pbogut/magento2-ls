@@ -19,15 +19,6 @@ enum XmlPart {
     None,
 }
 
-#[derive(Debug, Clone)]
-pub enum PathDepth {
-    #[allow(dead_code)]
-    Any,
-    Attribute,
-    #[allow(dead_code)]
-    Tags(usize),
-}
-
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmlCompletion {
@@ -54,11 +45,7 @@ impl XmlTag {
     }
 }
 
-pub fn get_current_position_path(
-    content: &str,
-    pos: Position,
-    depth: &PathDepth,
-) -> Option<XmlCompletion> {
+pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlCompletion> {
     let query_string = "
         (tag_name) @tag_name
         (attribute_value) @attr_val
@@ -73,7 +60,7 @@ pub fn get_current_position_path(
     for (m, _) in captures {
         let node = m.captures[0].node;
         if node_at_position(node, pos) {
-            let path = node_to_path(node, content, depth)?;
+            let path = node_to_path(node, content)?;
             let text = get_node_text_before_pos(node, content, pos);
             return Some(XmlCompletion { path, text });
         }
@@ -85,11 +72,10 @@ fn node_walk_back(node: Node) -> Option<Node> {
     node.prev_sibling().map_or_else(|| node.parent(), Some)
 }
 
-fn node_to_path(node: Node, content: &str, depth: &PathDepth) -> Option<String> {
+fn node_to_path(node: Node, content: &str) -> Option<String> {
     let mut path = vec![];
     let mut current_node = node;
     let mut has_attr = false;
-    let mut tags_count = 0;
     let mut node_ids = vec![];
     while let Some(node) = node_walk_back(current_node) {
         current_node = node;
@@ -107,25 +93,9 @@ fn node_to_path(node: Node, content: &str, depth: &PathDepth) -> Option<String> 
                     continue;
                 }
                 path.push((node.kind(), get_node_text(node.child(1)?, content)));
-                tags_count += 1;
             }
         } else if node.kind() == "tag_name" {
             path.push((node.kind(), get_node_text(node, content)));
-            tags_count += 1;
-        }
-
-        match depth {
-            PathDepth::Any => (),
-            PathDepth::Attribute => {
-                if has_attr {
-                    break;
-                }
-            }
-            PathDepth::Tags(level) => {
-                if tags_count == *level {
-                    break;
-                }
-            }
         }
     }
     path.reverse();
@@ -356,9 +326,9 @@ mod test {
         Position { line, character }
     }
 
-    fn get_test_position_path(xml: &str, depth: &PathDepth) -> Option<XmlCompletion> {
+    fn get_test_position_path(xml: &str) -> Option<XmlCompletion> {
         let pos = get_position_from_test_xml(xml);
-        get_current_position_path(&xml.replace('|', ""), pos, depth)
+        get_current_position_path(&xml.replace('|', ""), pos)
     }
 
     fn get_test_item_from_pos(xml: &str, path: &str) -> Option<M2Item> {
@@ -537,7 +507,6 @@ mod test {
                     <plugin name="pharmacy_klaviyo_set_consent_and_subscribe"
                         template="Mo|du
             "#,
-            &PathDepth::Any,
         );
         assert_eq!(
             item,
@@ -560,7 +529,6 @@ mod test {
                 </type>
             </config>
             "#,
-            &PathDepth::Any,
         );
         assert_eq!(
             item,
