@@ -26,6 +26,12 @@ pub struct XmlCompletion {
     pub text: String,
 }
 
+impl XmlCompletion {
+    pub fn match_path(&self, text: &str) -> bool {
+        self.path.ends_with(text)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct XmlTag {
     name: String,
