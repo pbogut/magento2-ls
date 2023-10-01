@@ -26,7 +26,7 @@ pub fn get_completion_from_params(
             x if x.match_path("[@template]") => {
                 completion_for_template(index, &x.text, &uri.get_area())
             }
-            x if x.match_path("/event/observer[@name]") => Some(events::get_completion_items()),
+            x if x.match_path("/config/event[@name]") => Some(events::get_completion_items()),
             _ => None,
         }
     } else {
