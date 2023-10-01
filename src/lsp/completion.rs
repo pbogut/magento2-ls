@@ -21,7 +21,7 @@ pub fn get_completion_from_params(
     let content = index.lock().get_file(&uri)?.clone();
 
     if uri.is_xml() {
-        let edit_path = xml::get_current_position_path(&content, pos, &xml::PathDepth::Any)?;
+        let edit_path = xml::get_current_position_path(&content, pos)?;
 
         match edit_path.path {
             p if p.ends_with("[@template]") => {
