@@ -8,7 +8,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 use crate::{
     indexer::Indexer,
     js,
-    m2_types::{M2Area, M2Item, M2Path},
+    m2::{M2Area, M2Item, M2Path},
     ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 

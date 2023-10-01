@@ -5,7 +5,7 @@ use parking_lot::MutexGuard;
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
-    m2_types::{M2Area, M2Item, M2Path, M2Uri},
+    m2::{M2Area, M2Item, M2Path, M2Uri},
     php::{self, PHPClass},
 };
 

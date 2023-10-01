@@ -2,7 +2,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams};
 
 use crate::{
     indexer::ArcIndexer,
-    m2_types::{M2Area, M2Path, M2Uri},
+    m2::{M2Area, M2Path, M2Uri},
     xml,
 };
 

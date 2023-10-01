@@ -7,7 +7,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
     indexer::ArcIndexer,
-    m2_types::M2Path,
+    m2::M2Path,
     ts::{get_node_text, get_range_from_node},
 };
 

@@ -6,7 +6,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
-    m2_types::{M2Item, M2Path},
+    m2::{M2Item, M2Path},
     ts::node_at_position,
 };
 
