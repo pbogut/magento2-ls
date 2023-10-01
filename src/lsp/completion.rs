@@ -2,7 +2,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams};
 
 use crate::{
     indexer::ArcIndexer,
-    m2::{M2Area, M2Path, M2Uri},
+    m2::{self, M2Area, M2Path, M2Uri},
     xml,
 };
 
@@ -36,7 +36,7 @@ fn completion_for_template(
     text: &str,
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
-    if text.is_empty() || is_part_of_module_name(text) {
+    if text.is_empty() || m2::is_part_of_module_name(text) {
         Some(
             index
                 .lock()
@@ -82,17 +82,4 @@ fn completion_for_template(
     } else {
         None
     }
-}
-
-fn is_part_of_module_name(text: &str) -> bool {
-    text.chars()
-        .reduce(|a, b| {
-            if b.is_alphanumeric() || b == '_' && (a != 'N') {
-                'Y'
-            } else {
-                'N'
-            }
-        })
-        .unwrap_or_default()
-        == 'Y'
 }

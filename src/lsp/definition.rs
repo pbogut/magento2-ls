@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lsp_types::{GotoDefinitionParams, Location, Range, Url};
 use parking_lot::MutexGuard;
@@ -161,7 +161,7 @@ pub fn get_location_from_params(
 }
 
 fn get_php_class_from_class_name(index: &MutexGuard<Indexer>, class: &str) -> Option<PHPClass> {
-    let module_path = get_module_path(index, class);
+    let module_path = index.split_class_to_path_and_suffix(class);
     match module_path {
         None => None,
         Some((mut file_path, suffix)) => {
@@ -187,25 +187,4 @@ fn path_to_location(path: &Path) -> Option<Location> {
     } else {
         None
     }
-}
-
-fn get_module_path(index: &MutexGuard<Indexer>, class: &str) -> Option<(PathBuf, Vec<String>)> {
-    let mut parts = class.split('\\').collect::<Vec<_>>();
-    let mut suffix = vec![];
-
-    while let Some(part) = parts.pop() {
-        suffix.push(part.to_string());
-        let prefix = parts.join("\\");
-
-        let module_path = index.get_module_path(&prefix);
-        match module_path {
-            Some(mod_path) => {
-                suffix.reverse();
-                return Some((mod_path, suffix));
-            }
-            None => continue,
-        }
-    }
-
-    None
 }
