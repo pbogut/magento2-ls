@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use convert_case::{Case, Casing};
 use glob::glob;
@@ -85,13 +82,9 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn update_index(index: &ArcIndexer, path: &Path) {
-    let modules = glob(
-        path.join("**/registration.php")
-            .to_str()
-            .expect("Path should be in valid encoding"),
-    )
-    .expect("Failed to read glob pattern");
+pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
+    let modules = glob(&path.append(&["**", "registration.php"]).to_path_string())
+        .expect("Failed to read glob pattern");
 
     let module_name_query = "
     (scoped_call_expression

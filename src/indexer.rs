@@ -6,7 +6,7 @@ use std::{
     time::SystemTime,
 };
 
-use lsp_types::{Position, Url};
+use lsp_types::Position;
 use parking_lot::Mutex;
 
 use crate::{js, m2_types::M2Item, php, xml};
@@ -122,11 +122,10 @@ impl Indexer {
         self.workspaces.contains(&path.to_path_buf())
     }
 
-    pub fn get_item_from_position(&self, uri: &Url, pos: Position) -> Option<M2Item> {
-        let file_path = uri.to_file_path().expect("Should be valid file path");
-        match file_path.extension()?.to_str()?.to_lowercase().as_str() {
-            "js" => js::get_item_from_position(self, uri, pos),
-            "xml" => xml::get_item_from_position(self, uri, pos),
+    pub fn get_item_from_position(&self, path: &PathBuf, pos: Position) -> Option<M2Item> {
+        match path.extension()?.to_str()?.to_lowercase().as_str() {
+            "js" => js::get_item_from_position(self, path, pos),
+            "xml" => xml::get_item_from_position(self, path, pos),
             _ => None,
         }
     }
@@ -152,7 +151,7 @@ impl Indexer {
 fn spawn_index(
     arc_indexer: &ArcIndexer,
     path: &Path,
-    callback: fn(&ArcIndexer, &Path),
+    callback: fn(&ArcIndexer, &PathBuf),
     msg: &str,
 ) -> JoinHandle<()> {
     let index = Arc::clone(arc_indexer);
