@@ -21,13 +21,12 @@ pub fn get_completion_from_params(
     let content = index.lock().get_file(&uri)?.clone();
 
     if uri.is_xml() {
-        let edit_path = xml::get_current_position_path(&content, pos)?;
-
-        match edit_path.path {
-            p if p.ends_with("[@template]") => {
-                completion_for_template(index, &edit_path.text, &uri.get_area())
+        let at_position = xml::get_current_position_path(&content, pos)?;
+        match at_position {
+            x if x.match_path("[@template]") => {
+                completion_for_template(index, &x.text, &uri.get_area())
             }
-            p if p.ends_with("/event/observer[@name]") => Some(events::get_completion_items()),
+            x if x.match_path("/event/observer[@name]") => Some(events::get_completion_items()),
             _ => None,
         }
     } else {
