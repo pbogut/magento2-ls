@@ -16,7 +16,7 @@ use lsp_types::{
     TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
 };
 
-use crate::indexer::Indexer;
+use crate::{indexer::Indexer, m2_types::M2Uri};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Note that  we must have our logging only write out to stderr.
@@ -104,14 +104,14 @@ fn main_loop(
                         let (id, params) = cast::<Completion>(req)?;
                         #[cfg(debug_assertions)]
                         eprintln!("got completion request #{id}: {params:?}");
-                        let result = lsp::completion_handler(&indexer, params);
+                        let result = lsp::completion_handler(&indexer, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     "textDocument/definition" => {
                         let (id, params) = cast::<GotoDefinition>(req)?;
                         #[cfg(debug_assertions)]
                         eprintln!("got definition request #{id}: {params:?}");
-                        let result = lsp::definition_handler(&indexer, params);
+                        let result = lsp::definition_handler(&indexer, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     _ => {
@@ -131,14 +131,14 @@ fn main_loop(
                         let params: lsp_types::DidOpenTextDocumentParams =
                             serde_json::from_value(not.params)
                                 .context("Deserializing notification params")?;
-                        let uri = params.text_document.uri;
+                        let uri = params.text_document.uri.to_path_buf();
                         indexer.lock().set_file(&uri, params.text_document.text);
                     }
                     "textDocument/didChange" => {
                         let params: lsp_types::DidChangeTextDocumentParams =
                             serde_json::from_value(not.params)
                                 .context("Deserializing notification params")?;
-                        let uri = params.text_document.uri;
+                        let uri = params.text_document.uri.to_path_buf();
                         indexer
                             .lock()
                             .set_file(&uri, &params.content_changes[0].text);

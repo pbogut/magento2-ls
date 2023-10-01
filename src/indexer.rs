@@ -13,7 +13,7 @@ use crate::{js, m2_types::M2Item, php, xml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Indexer {
-    buffers: HashMap<Url, String>,
+    buffers: HashMap<PathBuf, String>,
     magento_modules: Vec<String>,
     magento_module_paths: HashMap<String, PathBuf>,
     magento_front_themes: HashMap<String, PathBuf>,
@@ -40,15 +40,15 @@ impl Indexer {
         }
     }
 
-    pub fn set_file<S>(&mut self, uri: &Url, content: S)
+    pub fn set_file<S>(&mut self, path: &Path, content: S)
     where
         S: Into<String>,
     {
-        self.buffers.insert(uri.clone(), content.into());
+        self.buffers.insert(path.to_owned(), content.into());
     }
 
-    pub fn get_file(&self, uri: &Url) -> Option<&String> {
-        self.buffers.get(uri)
+    pub fn get_file(&self, path: &PathBuf) -> Option<&String> {
+        self.buffers.get(path)
     }
 
     pub fn get_modules(&self) -> Vec<String> {
