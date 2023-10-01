@@ -132,14 +132,16 @@ fn main_loop(
                             serde_json::from_value(not.params)
                                 .context("Deserializing notification params")?;
                         let uri = params.text_document.uri;
-                        Indexer::lock(&indexer).set_file(&uri, params.text_document.text);
+                        indexer.lock().set_file(&uri, params.text_document.text);
                     }
                     "textDocument/didChange" => {
                         let params: lsp_types::DidChangeTextDocumentParams =
                             serde_json::from_value(not.params)
                                 .context("Deserializing notification params")?;
                         let uri = params.text_document.uri;
-                        Indexer::lock(&indexer).set_file(&uri, &params.content_changes[0].text);
+                        indexer
+                            .lock()
+                            .set_file(&uri, &params.content_changes[0].text);
                     }
                     _ => {
                         eprintln!("unhandled notification: {:?}", not);

@@ -9,7 +9,7 @@ use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, Query, QueryCursor};
 
 use crate::{
-    indexer::{ArcIndexer, Indexer},
+    indexer::ArcIndexer,
     m2_types::M2Path,
     ts::{get_node_text, get_range_from_node},
 };
@@ -125,22 +125,23 @@ pub fn update_index(index: &ArcIndexer, path: &Path) {
                             let mut parent = file_path.clone();
                             parent.pop();
 
-                            Indexer::lock(index).add_module_path(mod_name, parent.clone());
+                            index.lock().add_module_path(mod_name, parent.clone());
 
                             match register_param_to_module(mod_name) {
                                 Some(M2Module::Module(m)) => {
-                                    Indexer::lock(index)
+                                    index
+                                        .lock()
                                         .add_module(mod_name)
                                         .add_module_path(&m, parent);
                                 }
                                 Some(M2Module::Library(l)) => {
-                                    Indexer::lock(index).add_module_path(&l, parent);
+                                    index.lock().add_module_path(&l, parent);
                                 }
                                 Some(M2Module::FrontTheme(t)) => {
-                                    Indexer::lock(index).add_front_theme_path(&t, parent);
+                                    index.lock().add_front_theme_path(&t, parent);
                                 }
                                 Some(M2Module::AdminTheme(t)) => {
-                                    Indexer::lock(index).add_admin_theme_path(&t, parent);
+                                    index.lock().add_admin_theme_path(&t, parent);
                                 }
                                 _ => (),
                             }

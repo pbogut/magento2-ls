@@ -1,9 +1,10 @@
-use std::{path::PathBuf, sync::MutexGuard};
+use std::path::PathBuf;
 
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, GotoDefinitionParams,
     GotoDefinitionResponse, Location, Range, Url,
 };
+use parking_lot::MutexGuard;
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
@@ -35,7 +36,7 @@ pub fn get_location_from_params(
     let uri = params.text_document_position_params.text_document.uri;
     let pos = params.text_document_position_params.position;
 
-    let item = Indexer::lock(index).get_item_from_position(&uri, pos);
+    let item = index.lock().get_item_from_position(&uri, pos);
     match item {
         Some(M2Item::ModComponent(_mod_name, file_path, mod_path)) => {
             let mut result = vec![];
@@ -62,7 +63,7 @@ pub fn get_location_from_params(
         }
         Some(M2Item::Component(comp)) => {
             let mut result = vec![];
-            let workspace_paths = Indexer::lock(index).workspace_paths();
+            let workspace_paths = index.lock().workspace_paths();
             for path in workspace_paths {
                 let mut path = path.join("lib").join("web").join(&comp);
                 path.set_extension("js");
@@ -77,7 +78,7 @@ pub fn get_location_from_params(
         }
         Some(M2Item::AdminPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = Indexer::lock(index).get_module_path(&mod_name);
+            let mod_path = index.lock().get_module_path(&mod_name);
             if let Some(path) = mod_path {
                 let templ_path = path.append(&["view", "adminhtml", "templates", &template]);
                 if templ_path.is_file() {
@@ -96,7 +97,7 @@ pub fn get_location_from_params(
             };
 
             #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in Indexer::lock(index).list_admin_themes_paths() {
+            for theme_path in index.lock().list_admin_themes_paths() {
                 let templ_path = theme_path.join(&mod_name).join("templates").join(&template);
                 if templ_path.is_file() {
                     result.push(Location {
@@ -110,7 +111,7 @@ pub fn get_location_from_params(
         }
         Some(M2Item::FrontPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = Indexer::lock(index).get_module_path(&mod_name);
+            let mod_path = index.lock().get_module_path(&mod_name);
             if let Some(path) = mod_path {
                 let templ_path = path.append(&["view", "frontend", "templates", &template]);
                 if templ_path.is_file() {
@@ -122,7 +123,7 @@ pub fn get_location_from_params(
             };
 
             #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in Indexer::lock(index).list_front_themes_paths() {
+            for theme_path in index.lock().list_front_themes_paths() {
                 let templ_path = theme_path.join(&mod_name).join("templates").join(&template);
                 if templ_path.is_file() {
                     result.push(Location {
@@ -135,14 +136,14 @@ pub fn get_location_from_params(
             Some(result)
         }
         Some(M2Item::Class(class)) => {
-            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
+            let phpclass = get_php_class_from_class_name(&index.lock(), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass.range,
             }])
         }
         Some(M2Item::Method(class, method)) => {
-            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
+            let phpclass = get_php_class_from_class_name(&index.lock(), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass
@@ -152,7 +153,7 @@ pub fn get_location_from_params(
             }])
         }
         Some(M2Item::Const(class, constant)) => {
-            let phpclass = get_php_class_from_class_name(&Indexer::lock(index), &class)?;
+            let phpclass = get_php_class_from_class_name(&index.lock(), &class)?;
             Some(vec![Location {
                 uri: phpclass.uri.clone(),
                 range: phpclass
@@ -171,7 +172,7 @@ pub fn get_completion_from_params(
 ) -> Option<Vec<CompletionItem>> {
     let uri = params.text_document_position.text_document.uri;
     let pos = params.text_document_position.position;
-    let content = Indexer::lock(index).get_file(&uri)?.clone();
+    let content = index.lock().get_file(&uri)?.clone();
 
     if uri.is_xml() {
         let xml_completion =
@@ -195,7 +196,8 @@ fn completion_for_template(
 ) -> Option<Vec<CompletionItem>> {
     if text.is_empty() || is_part_of_module_name(text) {
         Some(
-            Indexer::lock(index)
+            index
+                .lock()
                 .get_modules()
                 .iter()
                 .map(|module| CompletionItem {
@@ -209,7 +211,7 @@ fn completion_for_template(
         )
     } else if text.contains("::") {
         let module_name = text.split("::").next()?;
-        let path = Indexer::lock(index).get_module_path(module_name);
+        let path = index.lock().get_module_path(module_name);
         match path {
             None => None,
             Some(path) => {

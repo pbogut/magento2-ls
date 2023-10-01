@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::Arc,
     thread::{spawn, JoinHandle},
     time::SystemTime,
 };
 
 use lsp_types::{Position, Url};
+use parking_lot::Mutex;
 
 use crate::{js, m2_types::M2Item, php, xml};
 
@@ -135,20 +136,16 @@ impl Indexer {
     }
 
     pub fn update_index(arc_index: &ArcIndexer, path: &Path) -> Vec<JoinHandle<()>> {
-        let mut lock = Self::lock(arc_index);
-        if lock.has_workspace_path(path) {
+        let mut index = arc_index.lock();
+        if index.has_workspace_path(path) {
             vec![]
         } else {
-            lock.add_workspace_path(path);
+            index.add_workspace_path(path);
             vec![
                 spawn_index(arc_index, path, php::update_index, "PHP Indexing"),
                 spawn_index(arc_index, path, js::update_index, "JS Indexing"),
             ]
         }
-    }
-
-    pub fn lock(arc_indexer: &ArcIndexer) -> MutexGuard<Self> {
-        arc_indexer.lock().expect("Should be able to lock indexer")
     }
 }
 

@@ -174,7 +174,7 @@ fn update_index_from_config(index: &ArcIndexer, content: &str) {
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
         {
-            let mut index = index.lock().expect("Should be able to lock index");
+            let mut index = index.lock();
             match get_kind(m.captures[1].node, content) {
                 Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val),
                 Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
@@ -261,7 +261,7 @@ mod test {
         result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
 
-        assert_eq!(arc_index.lock().unwrap().to_owned(), result);
+        assert_eq!(arc_index.lock().to_owned(), result);
     }
 
     #[test]
