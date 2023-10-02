@@ -65,6 +65,10 @@ fn completion_for_classes(
                 .iter()
                 .map(|c| CompletionItem {
                     label: c.clone(),
+                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                        range,
+                        new_text: c.clone(),
+                    })),
                     label_details: None,
                     kind: Some(CompletionItemKind::CLASS),
                     detail: None,
