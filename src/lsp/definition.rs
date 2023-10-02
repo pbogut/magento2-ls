@@ -54,110 +54,28 @@ pub fn get_location_from_params(
         }
         Some(M2Item::AdminPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.lock().get_module_path(&mod_name);
-
-            if let Some(path) = mod_path {
-                for area in M2Area::Adminhtml.path_candidates() {
-                    let templ_path = path.append(&["view", &area, "templates", &template]);
-                    if let Some(location) = path_to_location(&templ_path) {
-                        result.push(location);
-                    }
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_admin_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
+            add_phtml_in_mod_location(index, &mut result, &mod_name, &template, &M2Area::Adminhtml);
+            add_phtml_in_admin_theme_location(index, &mut result, &mod_name, &template);
             Some(result)
         }
         Some(M2Item::FrontPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.lock().get_module_path(&mod_name);
-
-            if let Some(path) = mod_path {
-                for area in M2Area::Frontend.path_candidates() {
-                    let templ_path = path.append(&["view", &area, "templates", &template]);
-                    if let Some(location) = path_to_location(&templ_path) {
-                        result.push(location);
-                    }
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_front_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
+            add_phtml_in_mod_location(index, &mut result, &mod_name, &template, &M2Area::Frontend);
+            add_phtml_in_front_theme_location(index, &mut result, &mod_name, &template);
             Some(result)
         }
         Some(M2Item::BasePhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.lock().get_module_path(&mod_name);
-
-            if let Some(path) = mod_path {
-                for area in M2Area::Base.path_candidates() {
-                    let templ_path = path.append(&["view", &area, "templates", &template]);
-                    if let Some(location) = path_to_location(&templ_path) {
-                        result.push(location);
-                    }
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_front_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_admin_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
+            add_phtml_in_mod_location(index, &mut result, &mod_name, &template, &M2Area::Base);
+            add_phtml_in_front_theme_location(index, &mut result, &mod_name, &template);
+            add_phtml_in_admin_theme_location(index, &mut result, &mod_name, &template);
             Some(result)
         }
         Some(M2Item::UnknownPhtml(mod_name, template)) => {
             let mut result = vec![];
-            let mod_path = index.lock().get_module_path(&mod_name);
-
-            if let Some(path) = mod_path {
-                for area in M2Area::Unknown.path_candidates() {
-                    let templ_path = path.append(&["view", &area, "templates", &template]);
-                    if let Some(location) = path_to_location(&templ_path) {
-                        result.push(location);
-                    }
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_front_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
-            #[allow(clippy::significant_drop_in_scrutinee)]
-            for theme_path in index.lock().list_admin_themes_paths() {
-                let path = theme_path.append(&[&mod_name, "templates", &template]);
-                if let Some(location) = path_to_location(&path) {
-                    result.push(location);
-                }
-            }
-
+            add_phtml_in_mod_location(index, &mut result, &mod_name, &template, &M2Area::Unknown);
+            add_phtml_in_front_theme_location(index, &mut result, &mod_name, &template);
+            add_phtml_in_admin_theme_location(index, &mut result, &mod_name, &template);
             Some(result)
         }
         Some(M2Item::Class(class)) => {
@@ -188,6 +106,54 @@ pub fn get_location_from_params(
             }])
         }
         None => None,
+    }
+}
+
+fn add_phtml_in_mod_location(
+    index: &ArcIndexer,
+    result: &mut Vec<Location>,
+    mod_name: &str,
+    template: &str,
+    area: &M2Area,
+) {
+    let mod_path = index.lock().get_module_path(mod_name);
+    if let Some(path) = mod_path {
+        for area in area.path_candidates() {
+            let templ_path = path.append(&["view", &area, "templates", template]);
+            if let Some(location) = path_to_location(&templ_path) {
+                result.push(location);
+            }
+        }
+    }
+}
+
+fn add_phtml_in_admin_theme_location(
+    index: &ArcIndexer,
+    result: &mut Vec<Location>,
+    mod_name: &str,
+    template: &str,
+) {
+    #[allow(clippy::significant_drop_in_scrutinee)]
+    for theme_path in index.lock().list_admin_themes_paths() {
+        let path = theme_path.append(&[mod_name, "templates", template]);
+        if let Some(location) = path_to_location(&path) {
+            result.push(location);
+        }
+    }
+}
+
+fn add_phtml_in_front_theme_location(
+    index: &ArcIndexer,
+    result: &mut Vec<Location>,
+    mod_name: &str,
+    template: &str,
+) {
+    #[allow(clippy::significant_drop_in_scrutinee)]
+    for theme_path in index.lock().list_front_themes_paths() {
+        let path = theme_path.append(&[mod_name, "templates", template]);
+        if let Some(location) = path_to_location(&path) {
+            result.push(location);
+        }
     }
 }
 
