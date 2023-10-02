@@ -40,6 +40,14 @@ impl XmlCompletion {
             t.attributes.get(attr).map_or(false, |v| v == val)
         })
     }
+
+    pub fn attribute_in(&self, attr: &str, vals: &[&str]) -> bool {
+        self.tag.as_ref().map_or(false, |t| {
+            t.attributes
+                .get(attr)
+                .map_or(false, |v| vals.contains(&v.as_ref()))
+        })
+    }
 }
 
 #[allow(clippy::module_name_repetitions)]
