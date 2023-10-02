@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
                 "\"".to_string(),
                 "'".to_string(),
                 ":".to_string(),
+                "\\".to_string(),
             ]),
             work_done_progress_options: WorkDoneProgressOptions {
                 work_done_progress: None,

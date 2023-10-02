@@ -1,4 +1,4 @@
-use lsp_types::Position;
+use lsp_types::{Position, Range};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -24,6 +24,7 @@ enum XmlPart {
 pub struct XmlCompletion {
     pub path: String,
     pub text: String,
+    pub range: Range,
 }
 
 impl XmlCompletion {
@@ -55,6 +56,7 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
     let query_string = "
         (tag_name) @tag_name
         (attribute_value) @attr_val
+        (text) @text
     ";
 
     let tree = tree_sitter_parsers::parse(content, "html");
@@ -68,7 +70,14 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
         if node_at_position(node, pos) {
             let path = node_to_path(node, content)?;
             let text = get_node_text_before_pos(node, content, pos);
-            return Some(XmlCompletion { path, text });
+            let range = Range {
+                start: Position {
+                    line: node.start_position().row as u32,
+                    character: node.start_position().column as u32,
+                },
+                end: pos,
+            };
+            return Some(XmlCompletion { path, text, range });
         }
     }
     None
@@ -514,13 +523,9 @@ mod test {
                         template="Mo|du
             "#,
         );
-        assert_eq!(
-            item,
-            Some(XmlCompletion {
-                path: "/config/type/plugin[@template]".to_string(),
-                text: "Mo".to_string()
-            })
-        )
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/plugin[@template]");
+        assert_eq!(item.text, "Mo");
     }
 
     #[test]
@@ -536,12 +541,46 @@ mod test {
             </config>
             "#,
         );
-        assert_eq!(
-            item,
-            Some(XmlCompletion {
-                path: "/config/type/block[@template]".into(),
-                text: "Modu".into()
-            })
-        )
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[@template]");
+        assert_eq!(item.text, "Modu");
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_starting_inside_tag() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>|Nana
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+        );
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block");
+        assert_eq!(item.text, "");
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_inside_tag() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>Nan|a
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block");
+        assert_eq!(item.text, "Nan");
     }
 }
