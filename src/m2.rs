@@ -14,9 +14,11 @@ pub enum M2Item {
     FrontPhtml(String, String),
     AdminPhtml(String, String),
     BasePhtml(String, String),
+    UnknownPhtml(String, String),
 }
 
 #[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum M2Area {
     Frontend,
     Adminhtml,
@@ -30,7 +32,11 @@ impl M2Area {
             Self::Frontend => vec!["frontend".to_string(), "base".to_string()],
             Self::Adminhtml => vec!["adminhtml".to_string(), "base".to_string()],
             Self::Base => vec!["base".to_string()],
-            Self::Unknown => vec![],
+            Self::Unknown => vec![
+                "frontend".to_string(),
+                "adminhtml".to_string(),
+                "base".to_string(),
+            ],
         }
     }
 }
