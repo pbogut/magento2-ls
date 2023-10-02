@@ -3,6 +3,7 @@ mod js;
 mod lsp;
 mod m2;
 mod php;
+mod queries;
 mod ts;
 mod xml;
 

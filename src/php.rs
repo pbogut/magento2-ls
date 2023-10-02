@@ -3,11 +3,12 @@ use std::{collections::HashMap, path::PathBuf};
 use convert_case::{Case, Casing};
 use glob::glob;
 use lsp_types::{Position, Range, Url};
-use tree_sitter::{Node, Query, QueryCursor};
+use tree_sitter::{Node, QueryCursor};
 
 use crate::{
     indexer::ArcIndexer,
     m2::M2Path,
+    queries,
     ts::{get_node_text, get_range_from_node},
 };
 
@@ -86,14 +87,7 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
     let modules = glob(&path.append(&["**", "registration.php"]).to_path_string())
         .expect("Failed to read glob pattern");
 
-    let module_name_query = "
-    (scoped_call_expression
-      (name) @reg (#eq? @reg register)
-      (arguments
-        (string) @module_name
-      )
-    )";
-
+    let query = queries::php_registration();
     for moule_registration in modules {
         moule_registration.map_or_else(
             |_e| panic!("buhu"),
@@ -106,66 +100,49 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
                     .expect("Should have been able to read the file");
 
                 let tree = tree_sitter_parsers::parse(&content, "php");
-                Query::new(tree.language(), module_name_query).map_or_else(
-                    |e| eprintln!("Error creating query: {:?}", e),
-                    |query| {
-                        let mut cursor = QueryCursor::new();
-                        let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
-                        for m in matches {
-                            let mod_name = get_node_text(m.captures[1].node, &content);
-                            let mod_name = mod_name.trim_matches('"').trim_matches('\'');
+                let mut cursor = QueryCursor::new();
+                let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
+                for m in matches {
+                    let mod_name = get_node_text(m.captures[1].node, &content);
+                    let mod_name = mod_name.trim_matches('"').trim_matches('\'');
 
-                            let mut parent = file_path.clone();
-                            parent.pop();
+                    let mut parent = file_path.clone();
+                    parent.pop();
 
-                            index.lock().add_module_path(mod_name, parent.clone());
+                    index.lock().add_module_path(mod_name, parent.clone());
 
-                            match register_param_to_module(mod_name) {
-                                Some(M2Module::Module(m)) => {
-                                    index
-                                        .lock()
-                                        .add_module(mod_name)
-                                        .add_module_path(&m, parent);
-                                }
-                                Some(M2Module::Library(l)) => {
-                                    index.lock().add_module_path(&l, parent);
-                                }
-                                Some(M2Module::FrontTheme(t)) => {
-                                    index.lock().add_front_theme_path(&t, parent);
-                                }
-                                Some(M2Module::AdminTheme(t)) => {
-                                    index.lock().add_admin_theme_path(&t, parent);
-                                }
-                                _ => (),
-                            }
+                    match register_param_to_module(mod_name) {
+                        Some(M2Module::Module(m)) => {
+                            index
+                                .lock()
+                                .add_module(mod_name)
+                                .add_module_path(&m, parent);
                         }
-                    },
-                );
+                        Some(M2Module::Library(l)) => {
+                            index.lock().add_module_path(&l, parent);
+                        }
+                        Some(M2Module::FrontTheme(t)) => {
+                            index.lock().add_front_theme_path(&t, parent);
+                        }
+                        Some(M2Module::AdminTheme(t)) => {
+                            index.lock().add_admin_theme_path(&t, parent);
+                        }
+                        _ => (),
+                    }
+                }
             },
         );
     }
 }
 
 pub fn parse_php_file(file_path: &PathBuf) -> Option<PHPClass> {
-    let query_string = "
-      (namespace_definition (namespace_name) @namespace) ; pattern: 0
-      (class_declaration (name) @class)                  ; pattern: 1
-      (interface_declaration (name) @class)              ; pattern: 2
-      ((method_declaration (visibility_modifier)
-        @_vis (name) @name) (#eq? @_vis \"public\"))     ; pattern: 3
-      (const_element (name) @const)                      ; pattern: 4
-    ";
-
     let content =
         std::fs::read_to_string(file_path).expect("Should have been able to read the file");
-
     let tree = tree_sitter_parsers::parse(&content, "php");
-    let query = Query::new(tree.language(), query_string)
-        .map_err(|e| eprintln!("Error creating query: {:?}", e))
-        .expect("Error creating query");
+    let query = queries::php_class();
 
     let mut cursor = QueryCursor::new();
-    let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+    let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
     let mut ns: Option<Node> = None;
     let mut cls: Option<Node> = None;
