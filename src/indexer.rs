@@ -58,6 +58,13 @@ impl Indexer {
         modules
     }
 
+    pub fn get_module_class_prefixes(&self) -> Vec<String> {
+        self.get_modules()
+            .iter()
+            .map(|m| m.replace('_', "\\"))
+            .collect()
+    }
+
     pub fn get_module_path(&self, module: &str) -> Option<PathBuf> {
         self.magento_module_paths.get(module).cloned()
     }

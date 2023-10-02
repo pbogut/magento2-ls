@@ -54,6 +54,7 @@ pub trait M2Uri {
 #[allow(clippy::module_name_repetitions)]
 pub trait M2Path {
     fn has_components(&self, parts: &[&str]) -> bool;
+    fn string_components(&self) -> Vec<String>;
     fn relative_to<P: AsRef<Path>>(&self, base: P) -> PathBuf;
     fn append(&self, parts: &[&str]) -> Self;
     fn append_ext(&self, ext: &str) -> Self;
@@ -105,6 +106,12 @@ impl M2Path for PathBuf {
         }
     }
 
+    fn string_components(&self) -> Vec<String> {
+        self.components()
+            .map(|c| c.as_os_str().to_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
     fn has_components(&self, parts: &[&str]) -> bool {
         let mut start = false;
         let mut part_id = 0;
@@ -153,16 +160,21 @@ impl M2Uri for Url {
 }
 
 pub fn is_part_of_module_name(text: &str) -> bool {
-    text.chars()
-        .reduce(|a, b| {
-            if b.is_alphanumeric() || b == '_' && (a != 'N') {
-                'Y'
-            } else {
-                'N'
-            }
-        })
-        .unwrap_or_default()
-        == 'Y'
+    for char in text.chars() {
+        if !char.is_alphanumeric() && char != '_' {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn is_part_of_class_name(text: &str) -> bool {
+    for char in text.chars() {
+        if !char.is_alphanumeric() && char != '\\' {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -200,5 +212,35 @@ mod test {
             path.append_ext("php").to_str().unwrap(),
             "app/code/Magento/Checkout/Block/Cart.php"
         );
+    }
+
+    #[test]
+    fn test_is_part_of_class_name_when_module_name() {
+        assert!(!super::is_part_of_class_name("Some_Module"));
+    }
+
+    #[test]
+    fn test_is_part_of_class_name_when_module_class() {
+        assert!(super::is_part_of_class_name("Some\\Module"));
+    }
+
+    #[test]
+    fn test_is_part_of_class_name_when_only_one_letter() {
+        assert!(super::is_part_of_class_name("N"));
+    }
+
+    #[test]
+    fn test_is_part_of_module_name_when_module_name() {
+        assert!(super::is_part_of_module_name("Some_Module"));
+    }
+
+    #[test]
+    fn test_is_part_of_module_name_when_module_class() {
+        assert!(!super::is_part_of_module_name("Some\\Module"));
+    }
+
+    #[test]
+    fn test_is_part_of_module_name_when_only_one_letter() {
+        assert!(super::is_part_of_module_name("N"));
     }
 }
