@@ -47,16 +47,7 @@ pub fn get_completion_from_params(
             x if x.match_path("[@class]") || x.match_path("[@instance]") => {
                 completion_for_classes(index, &x.text, x.range)
             }
-            x if x.match_path("/arguments/argument") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("/arguments/argument/item") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("/arguments/argument/item/item") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.attribute_eq("xsi:type", "object") => {
+            x if x.attribute_in("xsi:type", &["object", "const", "init_parameter"]) => {
                 completion_for_classes(index, &x.text, x.range)
             }
             x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
