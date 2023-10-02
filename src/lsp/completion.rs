@@ -29,6 +29,9 @@ pub fn get_completion_from_params(
             x if x.match_path("[@template]") => {
                 completion_for_template(index, &x.text, &path.get_area())
             }
+            x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
+                completion_for_template(index, &x.text, &path.get_area())
+            }
             x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
                 Some(events::get_completion_items())
             }
@@ -38,12 +41,27 @@ pub fn get_completion_from_params(
             x if x.match_path("/config/preference[@type]") && path.ends_with("di.xml") => {
                 completion_for_classes(index, &x.text, x.range)
             }
+            x if x.match_path("/virtualType[@type]") && path.ends_with("di.xml") => {
+                completion_for_classes(index, &x.text, x.range)
+            }
             x if x.match_path("[@class]") || x.match_path("[@instance]") => {
                 completion_for_classes(index, &x.text, x.range)
             }
-            x if x.match_path("/type/arguments/argument") => {
+            x if x.match_path("/arguments/argument") => {
                 completion_for_classes(index, &x.text, x.range)
             }
+            x if x.match_path("/arguments/argument/item") => {
+                completion_for_classes(index, &x.text, x.range)
+            }
+            x if x.match_path("/arguments/argument/item/item") => {
+                completion_for_classes(index, &x.text, x.range)
+            }
+            x if x.attribute_eq("xsi:type", "object") => {
+                completion_for_classes(index, &x.text, x.range)
+            }
+            x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
+            x if x.match_path("/source_model") => completion_for_classes(index, &x.text, x.range),
+            x if x.match_path("/backend_model") => completion_for_classes(index, &x.text, x.range),
             _ => None,
         }
     } else {

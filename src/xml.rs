@@ -13,7 +13,7 @@ use crate::{
     ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum XmlPart {
     Text,
     Attribute(String),
@@ -26,16 +26,23 @@ pub struct XmlCompletion {
     pub path: String,
     pub text: String,
     pub range: Range,
+    pub tag: Option<XmlTag>,
 }
 
 impl XmlCompletion {
     pub fn match_path(&self, text: &str) -> bool {
         self.path.ends_with(text)
     }
+
+    pub fn attribute_eq(&self, attr: &str, val: &str) -> bool {
+        self.tag.as_ref().map_or(false, |t| {
+            t.attributes.get(attr).map_or(false, |v| v == val)
+        })
+    }
 }
 
-#[derive(Debug, Clone)]
-struct XmlTag {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XmlTag {
     name: String,
     attributes: HashMap<String, String>,
     text: String,
@@ -62,6 +69,7 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
         let node = m.captures[0].node;
         if node_at_position(node, pos) {
             let path = node_to_path(node, content)?;
+            let tag = node_to_tag(node, content);
             let text = get_node_text_before_pos(node, content, pos);
             let range = Range {
                 start: Position {
@@ -70,7 +78,12 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
                 },
                 end: pos,
             };
-            return Some(XmlCompletion { path, text, range });
+            return Some(XmlCompletion {
+                path,
+                text,
+                range,
+                tag,
+            });
         }
     }
     None
@@ -78,6 +91,23 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
 
 fn node_walk_back(node: Node) -> Option<Node> {
     node.prev_sibling().map_or_else(|| node.parent(), Some)
+}
+
+fn node_to_tag(node: Node, content: &str) -> Option<XmlTag> {
+    let mut current_node = node;
+    while let Some(node) = node_walk_back(current_node) {
+        current_node = node;
+        if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
+            return get_xml_tag_at_pos(
+                &get_node_text(node, content),
+                Position {
+                    line: 0,
+                    character: 0,
+                },
+            );
+        }
+    }
+    None
 }
 
 fn node_to_path(node: Node, content: &str) -> Option<String> {
@@ -213,10 +243,11 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
         }
     }
 
-    match tag.hover_on {
-        XmlPart::None => None,
-        _ => Some(tag),
+    if tag.name.is_empty() {
+        return None;
     }
+
+    Some(tag)
 }
 
 fn try_any_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
@@ -321,6 +352,11 @@ mod test {
         let uri = PathBuf::from(if cfg!(windows) { &win_path } else { path });
         let index = Indexer::new();
         get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
+    }
+
+    fn get_test_xml_tag_at_pos(xml: &str) -> Option<XmlTag> {
+        let pos = get_position_from_test_xml(xml);
+        get_xml_tag_at_pos(&xml.replace('|', ""), pos)
     }
 
     #[test]
@@ -551,5 +587,15 @@ mod test {
         let item = item.unwrap();
         assert_eq!(item.path, "/config/type/block");
         assert_eq!(item.text, "Nan");
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_inside_tag_22() {
+        let item = get_test_xml_tag_at_pos(r#"|<item attribute="value" name="other">"#);
+
+        let item = item.unwrap();
+        assert_eq!(item.name, "item");
+        assert!(item.attributes.get("name").is_some());
+        assert!(item.attributes.get("attribute").is_some());
     }
 }

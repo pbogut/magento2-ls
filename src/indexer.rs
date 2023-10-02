@@ -51,6 +51,10 @@ impl Indexer {
         self.buffers.get(path)
     }
 
+    pub fn del_file(&mut self, path: &PathBuf) {
+        self.buffers.remove(path);
+    }
+
     pub fn get_modules(&self) -> Vec<String> {
         let mut modules = self.magento_modules.clone();
         modules.sort_unstable();

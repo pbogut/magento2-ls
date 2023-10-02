@@ -13,8 +13,10 @@ use anyhow::{Context, Result};
 use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
 use lsp_types::{
     request::{Completion, GotoDefinition},
-    CompletionOptions, InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
+    CompletionOptions, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, InitializeParams, OneOf, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    WorkDoneProgressOptions,
 };
 
 use crate::{indexer::Indexer, m2::M2Uri};
@@ -92,64 +94,63 @@ fn main_loop(
 
     eprintln!("Starting main loop");
     for msg in &connection.receiver {
-        #[cfg(debug_assertions)]
-        eprintln!("got msg: {msg:?}");
         match msg {
             Message::Request(req) => {
                 if connection.handle_shutdown(&req)? {
                     return Ok(());
                 }
                 #[cfg(debug_assertions)]
-                eprintln!("got request: {req:?}");
                 match req.method.as_str() {
                     "textDocument/completion" => {
                         let (id, params) = cast::<Completion>(req)?;
-                        #[cfg(debug_assertions)]
-                        eprintln!("got completion request #{id}: {params:?}");
                         let result = lsp::completion_handler(&indexer, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     "textDocument/definition" => {
                         let (id, params) = cast::<GotoDefinition>(req)?;
-                        #[cfg(debug_assertions)]
-                        eprintln!("got definition request #{id}: {params:?}");
                         let result = lsp::definition_handler(&indexer, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     _ => {
-                        eprintln!("unhandled request: {:?}", req);
+                        eprintln!("unhandled request: {:?}", req.method);
                     }
                 }
             }
             Message::Response(_resp) => {
                 #[cfg(debug_assertions)]
-                eprintln!("got response: {_resp:?}");
+                eprintln!("response: {_resp:?}");
             }
-            Message::Notification(not) => {
-                #[cfg(debug_assertions)]
-                eprintln!("got notification: {not:?}");
-                match not.method.as_str() {
-                    "textDocument/didOpen" => {
-                        let params: lsp_types::DidOpenTextDocumentParams =
-                            serde_json::from_value(not.params)
-                                .context("Deserializing notification params")?;
-                        let uri = params.text_document.uri.to_path_buf();
-                        indexer.lock().set_file(&uri, params.text_document.text);
-                    }
-                    "textDocument/didChange" => {
-                        let params: lsp_types::DidChangeTextDocumentParams =
-                            serde_json::from_value(not.params)
-                                .context("Deserializing notification params")?;
-                        let uri = params.text_document.uri.to_path_buf();
-                        indexer
-                            .lock()
-                            .set_file(&uri, &params.content_changes[0].text);
-                    }
-                    _ => {
-                        eprintln!("unhandled notification: {:?}", not);
-                    }
+            Message::Notification(not) => match not.method.as_str() {
+                "textDocument/didOpen" => {
+                    let params: DidOpenTextDocumentParams = serde_json::from_value(not.params)
+                        .context("Deserializing notification params")?;
+                    let path = params.text_document.uri.to_path_buf();
+                    indexer.lock().set_file(&path, params.text_document.text);
+                    #[cfg(debug_assertions)]
+                    eprintln!("textDocument/didOpen: {path:?}");
                 }
-            }
+                "textDocument/didChange" => {
+                    let params: DidChangeTextDocumentParams = serde_json::from_value(not.params)
+                        .context("Deserializing notification params")?;
+                    let path = params.text_document.uri.to_path_buf();
+                    indexer
+                        .lock()
+                        .set_file(&path, &params.content_changes[0].text);
+                    #[cfg(debug_assertions)]
+                    eprintln!("textDocument/didChange: {path:?}");
+                }
+                "textDocument/didClose" => {
+                    let params: DidCloseTextDocumentParams = serde_json::from_value(not.params)
+                        .context("Deserializing notification params")?;
+                    let path = params.text_document.uri.to_path_buf();
+                    indexer.lock().del_file(&path);
+                    #[cfg(debug_assertions)]
+                    eprintln!("textDocument/didClose: {path:?}");
+                }
+                _ => {
+                    eprintln!("unhandled notification: {:?}", not.method);
+                }
+            },
         }
     }
 
