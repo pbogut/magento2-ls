@@ -181,7 +181,7 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
                 (attribute_name) @attr_name
                 (quoted_attribute_value (attribute_value) @attr_val)
             )?
-        )
+        ) @tag
         (text)? @text
     )
     (element
@@ -191,7 +191,7 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
                 (attribute_name) @attr_name
                 (quoted_attribute_value (attribute_value) @attr_val)
             )
-        )
+        ) @tag
     )
     ";
 
@@ -232,14 +232,12 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
                     .insert(last_attribute_name.clone(), get_node_text(node, content));
                 if hovered {
                     tag.hover_on = XmlPart::Attribute(last_attribute_name.clone());
-                    break;
                 }
             }
             "text" => {
                 tag.text = get_node_text(node, content);
                 if hovered {
                     tag.hover_on = XmlPart::Text;
-                    break;
                 }
             }
             _ => (),
