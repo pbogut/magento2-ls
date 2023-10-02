@@ -57,72 +57,88 @@ fn completion_for_classes(
     range: Range,
 ) -> Option<Vec<CompletionItem>> {
     let text = text.trim_start_matches('\\');
-    if text.is_empty() || (m2::is_part_of_class_name(text) && text.matches('\\').count() < 2) {
-        Some(
-            index
-                .lock()
-                .get_module_class_prefixes()
-                .iter()
-                .map(|c| CompletionItem {
-                    label: c.clone(),
-                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                        range,
-                        new_text: c.clone(),
-                    })),
-                    label_details: None,
-                    kind: Some(CompletionItemKind::CLASS),
-                    detail: None,
-                    ..CompletionItem::default()
-                })
-                .collect(),
-        )
-    } else if text.matches('\\').count() >= 2 {
-        let mut parts = text.split('\\');
-
-        let module_name = format!("{}_{}", parts.next()?, parts.next()?);
-
-        let mut parts = text.split('\\').collect::<Vec<&str>>();
-        parts.pop();
-        let typed_class_prefix = parts.join("\\");
-
-        let module_class = module_name.replace('_', "\\");
-        let module_path = index.lock().get_module_path(&module_name)?;
-        let candidates = glob(&module_path.append(&["**", "*.php"]).to_path_string())
-            .expect("Failed to read glob pattern");
-        let mut result = vec![];
-        for p in candidates {
-            let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
-            let rel_path = path
-                .relative_to(&module_path)
-                .string_components()
-                .join("\\");
-            let class_suffix = rel_path.trim_end_matches(".php");
-            let class = format!("{}\\{}", &module_class, class_suffix);
-
-            if class.ends_with("\\registration") {
-                continue;
-            }
-
-            if !class.starts_with(&typed_class_prefix) {
-                continue;
-            }
-
-            result.push(CompletionItem {
-                label: class.clone(),
-                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                    range,
-                    new_text: class,
-                })),
-                label_details: None,
-                kind: Some(CompletionItemKind::CLASS),
-                detail: None,
-                ..CompletionItem::default()
-            });
+    if text.is_empty() || (m2::is_part_of_class_name(text) && text.matches('\\').count() == 0) {
+        Some(completion_for_classes_prefix(index, range))
+    } else if text.matches('\\').count() == 1 {
+        let mut result = completion_for_classes_prefix(index, range);
+        if let Some(classes) = completion_for_classes_full(index, text, range) {
+            result.extend(classes);
         }
         Some(result)
+    } else if text.matches('\\').count() >= 2 {
+        completion_for_classes_full(index, text, range)
     } else {
         None
     }
+}
+
+fn completion_for_classes_prefix(index: &ArcIndexer, range: Range) -> Vec<CompletionItem> {
+    index
+        .lock()
+        .get_module_class_prefixes()
+        .iter()
+        .map(|c| CompletionItem {
+            label: c.clone(),
+            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                range,
+                new_text: c.clone(),
+            })),
+            label_details: None,
+            kind: Some(CompletionItemKind::CLASS),
+            detail: None,
+            ..CompletionItem::default()
+        })
+        .collect()
+}
+
+fn completion_for_classes_full(
+    index: &ArcIndexer,
+    text: &str,
+    range: Range,
+) -> Option<Vec<CompletionItem>> {
+    let mut parts = text.split('\\');
+
+    let module_name = format!("{}_{}", parts.next()?, parts.next()?);
+
+    let mut parts = text.split('\\').collect::<Vec<&str>>();
+    parts.pop();
+    let typed_class_prefix = parts.join("\\");
+
+    let module_class = module_name.replace('_', "\\");
+    let module_path = index.lock().get_module_path(&module_name)?;
+    let candidates = glob(&module_path.append(&["**", "*.php"]).to_path_string())
+        .expect("Failed to read glob pattern");
+    let mut result = vec![];
+    for p in candidates {
+        let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
+        let rel_path = path
+            .relative_to(&module_path)
+            .string_components()
+            .join("\\");
+        let class_suffix = rel_path.trim_end_matches(".php");
+        let class = format!("{}\\{}", &module_class, class_suffix);
+
+        if class.ends_with("\\registration") {
+            continue;
+        }
+
+        if !class.starts_with(&typed_class_prefix) {
+            continue;
+        }
+
+        result.push(CompletionItem {
+            label: class.clone(),
+            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                range,
+                new_text: class,
+            })),
+            label_details: None,
+            kind: Some(CompletionItemKind::CLASS),
+            detail: None,
+            ..CompletionItem::default()
+        });
+    }
+    Some(result)
 }
 
 fn completion_for_template(
