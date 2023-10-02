@@ -129,6 +129,37 @@ pub fn get_location_from_params(
 
             Some(result)
         }
+        Some(M2Item::UnknownPhtml(mod_name, template)) => {
+            let mut result = vec![];
+            let mod_path = index.lock().get_module_path(&mod_name);
+
+            if let Some(path) = mod_path {
+                for area in M2Area::Unknown.path_candidates() {
+                    let templ_path = path.append(&["view", &area, "templates", &template]);
+                    if let Some(location) = path_to_location(&templ_path) {
+                        result.push(location);
+                    }
+                }
+            }
+
+            #[allow(clippy::significant_drop_in_scrutinee)]
+            for theme_path in index.lock().list_front_themes_paths() {
+                let path = theme_path.append(&[&mod_name, "templates", &template]);
+                if let Some(location) = path_to_location(&path) {
+                    result.push(location);
+                }
+            }
+
+            #[allow(clippy::significant_drop_in_scrutinee)]
+            for theme_path in index.lock().list_admin_themes_paths() {
+                let path = theme_path.append(&[&mod_name, "templates", &template]);
+                if let Some(location) = path_to_location(&path) {
+                    result.push(location);
+                }
+            }
+
+            Some(result)
+        }
         Some(M2Item::Class(class)) => {
             let phpclass = get_php_class_from_class_name(&index.lock(), &class)?;
             Some(vec![Location {

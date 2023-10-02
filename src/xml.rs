@@ -13,6 +13,7 @@ use crate::{
     ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum XmlPart {
     Text,
@@ -41,6 +42,7 @@ impl XmlCompletion {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmlTag {
     name: String,
@@ -294,7 +296,10 @@ fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
                 parts.next()?.to_string(),
                 parts.next()?.to_string(),
             )),
-            M2Area::Unknown => None,
+            M2Area::Unknown => Some(M2Item::UnknownPhtml(
+                parts.next()?.to_string(),
+                parts.next()?.to_string(),
+            )),
         }
     } else {
         None
