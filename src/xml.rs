@@ -3,12 +3,13 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use tree_sitter::{Node, Query, QueryCursor};
+use tree_sitter::{Node, QueryCursor};
 
 use crate::{
     indexer::Indexer,
     js,
     m2::{M2Area, M2Item, M2Path},
+    queries,
     ts::{get_node_text, get_node_text_before_pos, node_at_position},
 };
 
@@ -53,18 +54,10 @@ impl XmlTag {
 }
 
 pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlCompletion> {
-    let query_string = "
-        (tag_name) @tag_name
-        (attribute_value) @attr_val
-        (text) @text
-    ";
-
     let tree = tree_sitter_parsers::parse(content, "html");
-    let query = Query::new(tree.language(), query_string)
-        .map_err(|e| eprintln!("Error creating query: {:?}", e))
-        .expect("Error creating query");
+    let query = queries::xml_current_position_path();
     let mut cursor = QueryCursor::new();
-    let captures = cursor.captures(&query, tree.root_node(), content.as_bytes());
+    let captures = cursor.captures(query, tree.root_node(), content.as_bytes());
     for (m, _) in captures {
         let node = m.captures[0].node;
         if node_at_position(node, pos) {
@@ -173,35 +166,11 @@ fn get_item_from_pos(
 }
 
 fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
-    let query_string = "
-    (element
-        (start_tag
-            (tag_name) @tag_name
-            (attribute
-                (attribute_name) @attr_name
-                (quoted_attribute_value (attribute_value) @attr_val)
-            )?
-        ) @tag
-        (text)? @text
-    )
-    (element
-        (self_closing_tag
-            (tag_name) @tag_name
-            (attribute
-                (attribute_name) @attr_name
-                (quoted_attribute_value (attribute_value) @attr_val)
-            )
-        ) @tag
-    )
-    ";
-
     let tree = tree_sitter_parsers::parse(content, "html");
-    let query = Query::new(tree.language(), query_string)
-        .map_err(|e| eprintln!("Error creating query: {:?}", e))
-        .expect("Error creating query");
+    let query = queries::xml_tag_at_pos();
 
     let mut cursor = QueryCursor::new();
-    let captures = cursor.captures(&query, tree.root_node(), content.as_bytes());
+    let captures = cursor.captures(query, tree.root_node(), content.as_bytes());
 
     let mut last_attribute_name = String::new();
     let mut last_tag_id: Option<usize> = None;
