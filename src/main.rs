@@ -99,7 +99,6 @@ fn main_loop(
                 if connection.handle_shutdown(&req)? {
                     return Ok(());
                 }
-                #[cfg(debug_assertions)]
                 match req.method.as_str() {
                     "textDocument/completion" => {
                         let (id, params) = cast::<Completion>(req)?;
