@@ -14,7 +14,6 @@ pub enum M2Item {
     FrontPhtml(String, String),
     AdminPhtml(String, String),
     BasePhtml(String, String),
-    UnknownPhtml(String, String),
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -23,7 +22,6 @@ pub enum M2Area {
     Frontend,
     Adminhtml,
     Base,
-    Unknown,
 }
 
 impl M2Area {
@@ -31,8 +29,7 @@ impl M2Area {
         match self {
             Self::Frontend => vec!["frontend".to_string(), "base".to_string()],
             Self::Adminhtml => vec!["adminhtml".to_string(), "base".to_string()],
-            Self::Base => vec!["base".to_string()],
-            Self::Unknown => vec![
+            Self::Base => vec![
                 "frontend".to_string(),
                 "adminhtml".to_string(),
                 "base".to_string(),
@@ -47,7 +44,6 @@ impl ToString for M2Area {
             Self::Frontend => "frontend".to_string(),
             Self::Adminhtml => "adminhtml".to_string(),
             Self::Base => "base".to_string(),
-            Self::Unknown => "unknown".to_string(),
         }
     }
 }
@@ -108,7 +104,7 @@ impl M2Path for PathBuf {
         {
             M2Area::Adminhtml
         } else {
-            M2Area::Unknown
+            M2Area::Base
         }
     }
 

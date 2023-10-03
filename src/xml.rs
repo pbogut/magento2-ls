@@ -317,10 +317,6 @@ fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
                 parts.next()?.to_string(),
                 parts.next()?.to_string(),
             )),
-            M2Area::Unknown => Some(M2Item::UnknownPhtml(
-                parts.next()?.to_string(),
-                parts.next()?.to_string(),
-            )),
         }
     } else {
         None

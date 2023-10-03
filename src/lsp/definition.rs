@@ -71,13 +71,6 @@ pub fn get_location_from_params(
             add_phtml_in_admin_theme_location(index, &mut result, &mod_name, &template);
             Some(result)
         }
-        Some(M2Item::UnknownPhtml(mod_name, template)) => {
-            let mut result = vec![];
-            add_phtml_in_mod_location(index, &mut result, &mod_name, &template, &M2Area::Unknown);
-            add_phtml_in_front_theme_location(index, &mut result, &mod_name, &template);
-            add_phtml_in_admin_theme_location(index, &mut result, &mod_name, &template);
-            Some(result)
-        }
         Some(M2Item::Class(class)) => {
             let phpclass = get_php_class_from_class_name(&index.lock(), &class)?;
             Some(vec![Location {
