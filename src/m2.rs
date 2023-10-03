@@ -86,7 +86,17 @@ impl M2Path for PathBuf {
 
     fn append_ext(&self, ext: &str) -> Self {
         let mut path = self.clone();
-        path.set_extension(ext);
+
+        match path.extension() {
+            None => {
+                path.set_extension(ext);
+            }
+            Some(extention) => {
+                let current_ext = extention.to_str().unwrap_or_default().to_string();
+                path.set_extension(current_ext + "." + ext);
+            }
+        }
+
         path
     }
 
