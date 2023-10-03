@@ -113,6 +113,13 @@ impl Indexer {
         self.js_maps[area.id()].get(name)
     }
 
+    pub fn get_component_maps_for_area(&self, area: &M2Area) -> Vec<String> {
+        self.js_maps[area.id()]
+            .keys()
+            .map(ToString::to_string)
+            .collect()
+    }
+
     pub fn add_component_map<S>(&mut self, name: &str, val: S, area: M2Area) -> Option<String>
     where
         S: Into<String>,
