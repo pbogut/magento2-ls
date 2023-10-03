@@ -27,13 +27,13 @@ pub fn get_completion_from_params(
         let at_position = xml::get_current_position_path(&content, pos)?;
         match at_position {
             x if x.match_path("[@template]") => {
-                completion_for_template(index, &x.text, &path.get_area())
+                completion_for_template(index, &x.text, x.range, &path.get_area())
             }
             x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
-                completion_for_template(index, &x.text, &path.get_area())
+                completion_for_template(index, &x.text, x.range, &path.get_area())
             }
             x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
-                Some(events::get_completion_items())
+                Some(events::get_completion_items(x.range))
             }
             x if x.match_path("/config/preference[@for]") && path.ends_with("di.xml") => {
                 completion_for_classes(index, &x.text, x.range)
@@ -153,6 +153,7 @@ fn completion_for_classes_full(
 fn completion_for_template(
     index: &ArcIndexer,
     text: &str,
+    range: Range,
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
     if text.is_empty() || m2::is_part_of_module_name(text) {
@@ -163,6 +164,10 @@ fn completion_for_template(
                 .iter()
                 .map(|module| CompletionItem {
                     label: module.clone(),
+                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                        range,
+                        new_text: module.clone(),
+                    })),
                     label_details: None,
                     kind: Some(CompletionItemKind::MODULE),
                     detail: None,
@@ -181,11 +186,19 @@ fn completion_for_template(
                     let view_path = path.append(&["view", &area_string, "templates"]);
                     let glob_path = view_path.append(&["**", "*.phtml"]);
                     files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                        let path = file
+                            .unwrap_or_default()
+                            .relative_to(&view_path)
+                            .string_components()
+                            .join("/");
+                        let label = (String::from(module_name) + "::" + &path).to_string();
+
                         CompletionItem {
-                            label: file
-                                .unwrap_or_default()
-                                .relative_to(&view_path)
-                                .to_path_string(),
+                            label: label.clone(),
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range,
+                                new_text: label,
+                            })),
                             label_details: None,
                             kind: Some(CompletionItemKind::FILE),
                             detail: None,
