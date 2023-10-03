@@ -67,7 +67,7 @@ pub trait M2Path {
     fn relative_to<P: AsRef<Path>>(&self, base: P) -> PathBuf;
     fn append(&self, parts: &[&str]) -> Self;
     fn append_ext(&self, ext: &str) -> Self;
-    fn is_xml(&self) -> bool;
+    fn get_ext(&self) -> String;
     fn is_frontend(&self) -> bool;
     fn is_test(&self) -> bool;
     fn get_area(&self) -> M2Area;
@@ -153,13 +153,12 @@ impl M2Path for PathBuf {
         false
     }
 
-    fn is_xml(&self) -> bool {
+    fn get_ext(&self) -> String {
         self.extension()
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default()
             .to_lowercase()
-            == "xml"
     }
 
     fn is_frontend(&self) -> bool {
