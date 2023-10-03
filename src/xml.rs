@@ -206,6 +206,7 @@ fn get_item_from_pos(
                 "string" => {
                     if tag.attributes.get("name") == Some(&"component".to_string()) {
                         let text = js::resolve_component_text(index, text)?;
+                        let text = js::resolve_component_text(index, text, &path.get_area())?;
                         js::text_to_component(index, text, path)
                     } else {
                         try_any_item_from_str(text, &path.get_area())

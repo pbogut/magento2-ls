@@ -6,7 +6,7 @@ use tree_sitter::{Node, QueryCursor};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
-    m2::{M2Item, M2Path},
+    m2::{M2Area, M2Item, M2Path},
     queries,
     ts::node_at_position,
 };
@@ -25,10 +25,10 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
         require_config.map_or_else(
             |_e| panic!("buhu"),
             |file_path| {
-                let content = std::fs::read_to_string(file_path)
+                let content = std::fs::read_to_string(&file_path)
                     .expect("Should have been able to read the file");
 
-                update_index_from_config(index, &content);
+                update_index_from_config(index, &content, file_path.get_area());
             },
         );
     }
@@ -48,7 +48,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
     for m in matches {
         if node_at_position(m.captures[1].node, pos) {
             let text = get_node_text(m.captures[1].node, content);
-            let text = resolve_component_text(index, &text)?;
+            let text = resolve_component_text(index, &text, &path.to_path_buf().get_area())?;
             return text_to_component(index, text, path);
         }
     }
@@ -56,10 +56,15 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
     None
 }
 
-pub fn resolve_component_text(index: &Indexer, text: &str) -> Option<String> {
-    index.get_component_map(text).map_or_else(
-        || Some(text.to_string()),
-        |t| resolve_component_text(index, t),
+pub fn resolve_component_text(index: &Indexer, text: &str, area: &M2Area) -> Option<String> {
+    index.get_component_map(text, area).map_or_else(
+        || {
+            area.lower_area().map_or_else(
+                || Some(text.to_string()),
+                |a| resolve_component_text(index, text, &a),
+            )
+        },
+        |t| resolve_component_text(index, t, area),
     )
 }
 
@@ -87,7 +92,7 @@ pub fn text_to_component(index: &Indexer, text: String, path: &Path) -> Option<M
     }
 }
 
-fn update_index_from_config(index: &ArcIndexer, content: &str) {
+fn update_index_from_config(index: &ArcIndexer, content: &str, area: M2Area) {
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_require_config();
 
@@ -100,7 +105,9 @@ fn update_index_from_config(index: &ArcIndexer, content: &str) {
         {
             let mut index = index.lock();
             match get_kind(m.captures[1].node, content) {
-                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val),
+                Some(JSTypes::Map | JSTypes::Paths) => {
+                    index.add_component_map(&key, val, area.clone())
+                }
                 Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
                 None => continue,
             };
@@ -172,16 +179,17 @@ mod test {
         "#;
 
         let arc_index = index.into_arc();
-        update_index_from_config(&arc_index, content);
+        update_index_from_config(&arc_index, content, M2Area::Base);
 
         let mut result = Indexer::new();
         result.add_component_map(
             "other/core/extension",
-            "Other_Module/js/core_ext".to_string(),
+            "Other_Module/js/core_ext",
+            M2Area::Base,
         );
-        result.add_component_map("prototype", "Something_Else/js/prototype.min");
-        result.add_component_map("some/js/component", "Some_Model/js/component");
-        result.add_component_map("otherComp", "Some_Other/js/comp");
+        result.add_component_map("prototype", "Something_Else/js/prototype.min", M2Area::Base);
+        result.add_component_map("some/js/component", "Some_Model/js/component", M2Area::Base);
+        result.add_component_map("otherComp", "Some_Other/js/comp", M2Area::Base);
         result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
 

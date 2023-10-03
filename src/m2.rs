@@ -36,6 +36,14 @@ impl M2Area {
             ],
         }
     }
+
+    pub fn lower_area(&self) -> Option<Self> {
+        match self {
+            Self::Frontend => Some(Self::Base),
+            Self::Adminhtml => Some(Self::Base),
+            Self::Base => None,
+        }
+    }
 }
 
 impl ToString for M2Area {
