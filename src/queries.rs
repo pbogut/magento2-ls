@@ -4,12 +4,26 @@ use tree_sitter::{Language, Query};
 
 pub static JS_REQUIRE_CONFIG: OnceLock<Query> = OnceLock::new();
 pub static JS_ITEM_FROM_POS: OnceLock<Query> = OnceLock::new();
+pub static JS_COMPLETION_ITEM_DEFINITION: OnceLock<Query> = OnceLock::new();
 
 pub static PHP_REGISTRATION: OnceLock<Query> = OnceLock::new();
 pub static PHP_CLASS: OnceLock<Query> = OnceLock::new();
 
 pub static XML_TAG_AT_POS: OnceLock<Query> = OnceLock::new();
 pub static XML_CURRENT_POSITION_PATH: OnceLock<Query> = OnceLock::new();
+
+pub fn js_completion_definition_item() -> &'static Query {
+    query(
+        &JS_COMPLETION_ITEM_DEFINITION,
+        r#"
+        (
+            (identifier) @def (#eq? @def define)
+            (arguments (array [(string) (ERROR) (binary_expression)] @str))
+        )
+        "#,
+        "javascript",
+    )
+}
 
 pub fn js_require_config() -> &'static Query {
     let map_query = r#"

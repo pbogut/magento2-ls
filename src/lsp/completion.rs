@@ -1,12 +1,16 @@
 mod events;
 
+use std::path::PathBuf;
+
 use glob::glob;
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionParams, CompletionTextEdit, Range, TextEdit,
+    CompletionItem, CompletionItemKind, CompletionParams, CompletionTextEdit, Position, Range,
+    TextEdit,
 };
 
 use crate::{
     indexer::ArcIndexer,
+    js::{self, JsCompletionType},
     m2::{self, M2Area, M2Path, M2Uri},
     xml,
 };
@@ -23,43 +27,70 @@ pub fn get_completion_from_params(
     let pos = params.text_document_position.position;
     let content = index.lock().get_file(&path)?.clone();
 
-    if path.is_xml() {
-        let at_position = xml::get_current_position_path(&content, pos)?;
-        match at_position {
-            x if x.match_path("[@template]") => {
-                completion_for_template(index, &x.text, x.range, &path.get_area())
-            }
-            x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
-                completion_for_template(index, &x.text, x.range, &path.get_area())
-            }
-            x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "component") => {
-                completion_for_component(index, &x.text, x.range, &path.get_area())
-            }
-            x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
-                Some(events::get_completion_items(x.range))
-            }
-            x if x.match_path("/config/preference[@for]") && path.ends_with("di.xml") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("/config/preference[@type]") && path.ends_with("di.xml") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("/virtualType[@type]") && path.ends_with("di.xml") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("[@class]") || x.match_path("[@instance]") => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.attribute_in("xsi:type", &["object", "const", "init_parameter"]) => {
-                completion_for_classes(index, &x.text, x.range)
-            }
-            x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
-            x if x.match_path("/source_model") => completion_for_classes(index, &x.text, x.range),
-            x if x.match_path("/backend_model") => completion_for_classes(index, &x.text, x.range),
-            _ => None,
+    match path.get_ext().as_str() {
+        "xml" => xml_completion_handler(index, &content, &path, pos),
+        "js" => js_completion_handler(index, &content, &path, pos),
+        _ => None,
+    }
+}
+
+fn js_completion_handler(
+    index: &ArcIndexer,
+    content: &str,
+    path: &PathBuf,
+    pos: Position,
+) -> Option<Vec<CompletionItem>> {
+    let at_position = js::get_completion_item(content, pos)?;
+
+    match at_position.kind {
+        JsCompletionType::Definition => completion_for_component(
+            index,
+            &at_position.text,
+            at_position.range,
+            &path.get_area(),
+        ),
+    }
+}
+
+fn xml_completion_handler(
+    index: &ArcIndexer,
+    content: &str,
+    path: &PathBuf,
+    pos: Position,
+) -> Option<Vec<CompletionItem>> {
+    let at_position = xml::get_current_position_path(content, pos)?;
+    match at_position {
+        x if x.match_path("[@template]") => {
+            completion_for_template(index, &x.text, x.range, &path.get_area())
         }
-    } else {
-        None
+        x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
+            completion_for_template(index, &x.text, x.range, &path.get_area())
+        }
+        x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "component") => {
+            completion_for_component(index, &x.text, x.range, &path.get_area())
+        }
+        x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
+            Some(events::get_completion_items(x.range))
+        }
+        x if x.match_path("/config/preference[@for]") && path.ends_with("di.xml") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        x if x.match_path("/config/preference[@type]") && path.ends_with("di.xml") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        x if x.match_path("/virtualType[@type]") && path.ends_with("di.xml") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        x if x.match_path("[@class]") || x.match_path("[@instance]") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        x if x.attribute_in("xsi:type", &["object", "const", "init_parameter"]) => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
+        x if x.match_path("/source_model") => completion_for_classes(index, &x.text, x.range),
+        x if x.match_path("/backend_model") => completion_for_classes(index, &x.text, x.range),
+        _ => None,
     }
 }
 
@@ -171,14 +202,7 @@ fn completion_for_component(
     range: Range,
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
-    if dbg!(text.is_empty()) {
-        let mut modules = index.lock().get_modules();
-        modules.extend(index.lock().get_component_maps_for_area(area));
-        if let Some(lower_area) = area.lower_area() {
-            modules.extend(index.lock().get_component_maps_for_area(&lower_area));
-        }
-        Some(string_vec_and_range_to_completion_list(modules, range))
-    } else if text.contains('/') {
+    if text.contains('/') {
         let module_name = text.split('/').next()?;
         let mut files = vec![];
         if let Some(path) = index.lock().get_module_path(module_name) {
@@ -196,6 +220,19 @@ fn completion_for_component(
                 }));
             }
         }
+        let workspaces = index.lock().workspace_paths();
+        for path in workspaces {
+            let view_path = path.append(&["lib", "web"]);
+            let glob_path = view_path.append(&["**", "*.js"]);
+            files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                let path = file
+                    .unwrap_or_default()
+                    .relative_to(&view_path)
+                    .string_components()
+                    .join("/");
+                path.trim_end_matches(".js").to_string()
+            }));
+        }
 
         files.extend(index.lock().get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
@@ -203,9 +240,24 @@ fn completion_for_component(
         }
         Some(string_vec_and_range_to_completion_list(files, range))
     } else {
-        let mut modules = index.lock().get_component_maps_for_area(area);
+        let mut modules = vec![];
+        modules.extend(index.lock().get_modules());
+        modules.extend(index.lock().get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
             modules.extend(index.lock().get_component_maps_for_area(&lower_area));
+        }
+        let workspaces = index.lock().workspace_paths();
+        for path in workspaces {
+            let view_path = path.append(&["lib", "web"]);
+            let glob_path = view_path.append(&["**", "*.js"]);
+            modules.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                let path = file
+                    .unwrap_or_default()
+                    .relative_to(&view_path)
+                    .string_components()
+                    .join("/");
+                path.trim_end_matches(".js").to_string()
+            }));
         }
         Some(string_vec_and_range_to_completion_list(modules, range))
     }

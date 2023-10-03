@@ -1,20 +1,34 @@
 use std::path::{Path, PathBuf};
 
 use glob::glob;
-use lsp_types::Position;
+use lsp_types::{Position, Range};
 use tree_sitter::{Node, QueryCursor};
 
 use crate::{
     indexer::{ArcIndexer, Indexer},
     m2::{M2Area, M2Item, M2Path},
     queries,
-    ts::node_at_position,
+    ts::{self, node_at_position},
 };
 
 enum JSTypes {
     Map,
     Paths,
     Mixins,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JsCompletionType {
+    Definition,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JsCompletion {
+    pub text: String,
+    pub range: Range,
+    pub kind: JsCompletionType,
 }
 
 pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
@@ -32,6 +46,39 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
             },
         );
     }
+}
+
+pub fn get_completion_item(content: &str, pos: Position) -> Option<JsCompletion> {
+    let tree = tree_sitter_parsers::parse(content, "javascript");
+    let query = queries::js_completion_definition_item();
+    let mut cursor = QueryCursor::new();
+    let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
+
+    for m in matches {
+        let node = m.captures[1].node;
+        if node_at_position(node, pos) {
+            let mut text = ts::get_node_text_before_pos(node, content, pos);
+            if text.is_empty() {
+                return None;
+            }
+            text = text[1..].to_string();
+            let range = Range {
+                start: Position {
+                    line: node.start_position().row as u32,
+                    character: 1 + node.start_position().column as u32,
+                },
+                end: pos,
+            };
+
+            return Some(JsCompletion {
+                text,
+                range,
+                kind: JsCompletionType::Definition,
+            });
+        }
+    }
+
+    None
 }
 
 pub fn get_item_from_position(index: &Indexer, path: &PathBuf, pos: Position) -> Option<M2Item> {
