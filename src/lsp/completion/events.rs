@@ -1,5 +1,4 @@
-use lsp_types::{CompletionItem, CompletionItemKind};
-
+use lsp_types::{CompletionItem, CompletionItemKind, CompletionTextEdit, Range, TextEdit};
 pub const EVENT_LIST: [&str; 344] = [
     "abstract_search_result_load_after",
     "abstract_search_result_load_before",
@@ -347,11 +346,15 @@ pub const EVENT_LIST: [&str; 344] = [
     "{eventPrefix}_validate_before",
 ];
 
-pub fn get_completion_items() -> Vec<CompletionItem> {
+pub fn get_completion_items(range: Range) -> Vec<CompletionItem> {
     EVENT_LIST
         .iter()
         .map(|event| CompletionItem {
             label: (*event).to_string(),
+            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                range,
+                new_text: (*event).to_string(),
+            })),
             label_details: None,
             kind: Some(CompletionItemKind::EVENT),
             detail: None,

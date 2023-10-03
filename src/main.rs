@@ -96,6 +96,8 @@ fn main_loop(
     for msg in &connection.receiver {
         match msg {
             Message::Request(req) => {
+                #[cfg(debug_assertions)]
+                eprintln!("request: {:?}", req.method);
                 if connection.handle_shutdown(&req)? {
                     return Ok(());
                 }

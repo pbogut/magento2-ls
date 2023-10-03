@@ -78,13 +78,22 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
     for (m, _) in captures {
         let node = m.captures[0].node;
         if node_at_position(node, pos) {
+            let mut text = get_node_text_before_pos(node, content, pos);
+            let mut start_col = node.start_position().column as u32;
+            if node.kind() == "quoted_attribute_value" {
+                if text == "\"" {
+                    start_col += 1;
+                    text = String::new();
+                } else {
+                    continue;
+                }
+            }
             let path = node_to_path(node, content)?;
             let tag = node_to_tag(node, content);
-            let text = get_node_text_before_pos(node, content, pos);
             let range = Range {
                 start: Position {
                     line: node.start_position().row as u32,
-                    character: node.start_position().column as u32,
+                    character: start_col,
                 },
                 end: pos,
             };
@@ -108,8 +117,12 @@ fn node_to_tag(node: Node, content: &str) -> Option<XmlTag> {
     while let Some(node) = node_walk_back(current_node) {
         current_node = node;
         if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
+            let text = get_node_text(node, content);
+            if text.chars().last()? != '>' {
+                return None;
+            }
             return get_xml_tag_at_pos(
-                &get_node_text(node, content),
+                &text,
                 Position {
                     line: 0,
                     character: 0,
@@ -566,6 +579,25 @@ mod test {
     }
 
     #[test]
+    fn test_get_current_position_path_when_in_empty_attribute_value() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block class="|"
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[@class]");
+        assert_eq!(item.text, "");
+    }
+
+    #[test]
     fn test_get_current_position_path_when_starting_inside_tag() {
         let item = get_test_position_path(
             r#"<?xml version=\"1.0\"?>
@@ -581,6 +613,7 @@ mod test {
         let item = item.unwrap();
         assert_eq!(item.path, "/config/type/block");
         assert_eq!(item.text, "");
+        assert!(item.tag.is_none());
     }
 
     #[test]
@@ -600,10 +633,26 @@ mod test {
         let item = item.unwrap();
         assert_eq!(item.path, "/config/type/block");
         assert_eq!(item.text, "Nan");
+        assert!(item.tag.is_none());
     }
 
     #[test]
-    fn test_get_current_position_path_when_inside_tag_22() {
+    fn test_get_current_position_path_outside_attribute_and_text() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+                <item xsi:type="object"|
+                <item/>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_get_xml_tag_at_position_0_when_content_is_opening_tag() {
         let item = get_test_xml_tag_at_pos(r#"|<item attribute="value" name="other">"#);
 
         let item = item.unwrap();
