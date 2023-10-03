@@ -28,7 +28,7 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
                 let content = std::fs::read_to_string(&file_path)
                     .expect("Should have been able to read the file");
 
-                update_index_from_config(index, &content, file_path.get_area());
+                update_index_from_config(index, &content, &file_path.get_area());
             },
         );
     }
@@ -92,7 +92,7 @@ pub fn text_to_component(index: &Indexer, text: String, path: &Path) -> Option<M
     }
 }
 
-fn update_index_from_config(index: &ArcIndexer, content: &str, area: M2Area) {
+fn update_index_from_config(index: &ArcIndexer, content: &str, area: &M2Area) {
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_require_config();
 
@@ -105,9 +105,7 @@ fn update_index_from_config(index: &ArcIndexer, content: &str, area: M2Area) {
         {
             let mut index = index.lock();
             match get_kind(m.captures[1].node, content) {
-                Some(JSTypes::Map | JSTypes::Paths) => {
-                    index.add_component_map(&key, val, area.clone())
-                }
+                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val, area),
                 Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
                 None => continue,
             };
@@ -179,17 +177,25 @@ mod test {
         "#;
 
         let arc_index = index.into_arc();
-        update_index_from_config(&arc_index, content, M2Area::Base);
+        update_index_from_config(&arc_index, content, &M2Area::Base);
 
         let mut result = Indexer::new();
         result.add_component_map(
             "other/core/extension",
             "Other_Module/js/core_ext",
-            M2Area::Base,
+            &M2Area::Base,
         );
-        result.add_component_map("prototype", "Something_Else/js/prototype.min", M2Area::Base);
-        result.add_component_map("some/js/component", "Some_Model/js/component", M2Area::Base);
-        result.add_component_map("otherComp", "Some_Other/js/comp", M2Area::Base);
+        result.add_component_map(
+            "prototype",
+            "Something_Else/js/prototype.min",
+            &M2Area::Base,
+        );
+        result.add_component_map(
+            "some/js/component",
+            "Some_Model/js/component",
+            &M2Area::Base,
+        );
+        result.add_component_map("otherComp", "Some_Other/js/comp", &M2Area::Base);
         result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
 
