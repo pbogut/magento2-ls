@@ -78,7 +78,7 @@ end
 M.setup = function(opts)
   opts = opts or {}
   opts = vim.tbl_deep_extend('keep', opts, {
-    filetypes = { 'xml' },
+    filetypes = { 'xml', 'javascript' },
     name = 'magento2-ls',
     cmd = { script_path('../target/release/magento2-ls') .. (get_system() == 'windows' and '.exe' or '') },
     root_dir = vim.fn.getcwd(),
