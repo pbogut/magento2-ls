@@ -32,6 +32,9 @@ pub fn get_completion_from_params(
             x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
                 completion_for_template(index, &x.text, x.range, &path.get_area())
             }
+            x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "component") => {
+                completion_for_component(index, &x.text, x.range, &path.get_area())
+            }
             x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
                 Some(events::get_completion_items(x.range))
             }
@@ -82,22 +85,8 @@ fn completion_for_classes(
 }
 
 fn completion_for_classes_prefix(index: &ArcIndexer, range: Range) -> Vec<CompletionItem> {
-    index
-        .lock()
-        .get_module_class_prefixes()
-        .iter()
-        .map(|c| CompletionItem {
-            label: c.clone(),
-            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                range,
-                new_text: c.clone(),
-            })),
-            label_details: None,
-            kind: Some(CompletionItemKind::CLASS),
-            detail: None,
-            ..CompletionItem::default()
-        })
-        .collect()
+    let module_prefixes = index.lock().get_module_class_prefixes();
+    string_vec_and_range_to_completion_list(module_prefixes, range)
 }
 
 fn completion_for_classes_full(
@@ -117,7 +106,7 @@ fn completion_for_classes_full(
     let module_path = index.lock().get_module_path(&module_name)?;
     let candidates = glob(&module_path.append(&["**", "*.php"]).to_path_string())
         .expect("Failed to read glob pattern");
-    let mut result = vec![];
+    let mut classes = vec![];
     for p in candidates {
         let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
         let rel_path = path
@@ -135,19 +124,9 @@ fn completion_for_classes_full(
             continue;
         }
 
-        result.push(CompletionItem {
-            label: class.clone(),
-            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                range,
-                new_text: class,
-            })),
-            label_details: None,
-            kind: Some(CompletionItemKind::CLASS),
-            detail: None,
-            ..CompletionItem::default()
-        });
+        classes.push(class);
     }
-    Some(result)
+    Some(string_vec_and_range_to_completion_list(classes, range))
 }
 
 fn completion_for_template(
@@ -157,24 +136,8 @@ fn completion_for_template(
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
     if text.is_empty() || m2::is_part_of_module_name(text) {
-        Some(
-            index
-                .lock()
-                .get_modules()
-                .iter()
-                .map(|module| CompletionItem {
-                    label: module.clone(),
-                    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                        range,
-                        new_text: module.clone(),
-                    })),
-                    label_details: None,
-                    kind: Some(CompletionItemKind::MODULE),
-                    detail: None,
-                    ..CompletionItem::default()
-                })
-                .collect(),
-        )
+        let modules = index.lock().get_modules();
+        Some(string_vec_and_range_to_completion_list(modules, range))
     } else if text.contains("::") {
         let module_name = text.split("::").next()?;
         let path = index.lock().get_module_path(module_name);
@@ -191,27 +154,81 @@ fn completion_for_template(
                             .relative_to(&view_path)
                             .string_components()
                             .join("/");
-                        let label = (String::from(module_name) + "::" + &path).to_string();
-
-                        CompletionItem {
-                            label: label.clone(),
-                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                                range,
-                                new_text: label,
-                            })),
-                            label_details: None,
-                            kind: Some(CompletionItemKind::FILE),
-                            detail: None,
-                            ..CompletionItem::default()
-                        }
+                        String::from(module_name) + "::" + &path
                     }));
                 }
-                files.sort_unstable_by(|a, b| a.label.cmp(&b.label));
-                files.dedup();
-                Some(files)
+                Some(string_vec_and_range_to_completion_list(files, range))
             }
         }
     } else {
         None
     }
+}
+
+fn completion_for_component(
+    index: &ArcIndexer,
+    text: &str,
+    range: Range,
+    area: &M2Area,
+) -> Option<Vec<CompletionItem>> {
+    if dbg!(text.is_empty()) {
+        let mut modules = index.lock().get_modules();
+        modules.extend(index.lock().get_component_maps_for_area(area));
+        if let Some(lower_area) = area.lower_area() {
+            modules.extend(index.lock().get_component_maps_for_area(&lower_area));
+        }
+        Some(string_vec_and_range_to_completion_list(modules, range))
+    } else if text.contains('/') {
+        let module_name = text.split('/').next()?;
+        let mut files = vec![];
+        if let Some(path) = index.lock().get_module_path(module_name) {
+            for area in area.path_candidates() {
+                let view_path = path.append(&["view", &area, "web"]);
+                let glob_path = view_path.append(&["**", "*.js"]);
+                files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                    let path = file
+                        .unwrap_or_default()
+                        .relative_to(&view_path)
+                        .string_components()
+                        .join("/");
+                    let path = path.trim_end_matches(".js");
+                    String::from(module_name) + "/" + path
+                }));
+            }
+        }
+
+        files.extend(index.lock().get_component_maps_for_area(area));
+        if let Some(lower_area) = area.lower_area() {
+            files.extend(index.lock().get_component_maps_for_area(&lower_area));
+        }
+        Some(string_vec_and_range_to_completion_list(files, range))
+    } else {
+        let mut modules = index.lock().get_component_maps_for_area(area);
+        if let Some(lower_area) = area.lower_area() {
+            modules.extend(index.lock().get_component_maps_for_area(&lower_area));
+        }
+        Some(string_vec_and_range_to_completion_list(modules, range))
+    }
+}
+
+fn string_vec_and_range_to_completion_list(
+    mut strings: Vec<String>,
+    range: Range,
+) -> Vec<CompletionItem> {
+    strings.sort_unstable();
+    strings.dedup();
+    strings
+        .iter()
+        .map(|label| CompletionItem {
+            label: label.clone(),
+            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                range,
+                new_text: label.clone(),
+            })),
+            label_details: None,
+            kind: Some(CompletionItemKind::FILE),
+            detail: None,
+            ..CompletionItem::default()
+        })
+        .collect()
 }

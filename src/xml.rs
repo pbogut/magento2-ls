@@ -75,8 +75,8 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
     let query = queries::xml_current_position_path();
     let mut cursor = QueryCursor::new();
     let captures = cursor.captures(query, tree.root_node(), content.as_bytes());
-    for (m, _) in captures {
-        let node = m.captures[0].node;
+    for (m, i) in captures {
+        let node = m.captures[i].node;
         if node_at_position(node, pos) {
             let mut text = get_node_text_before_pos(node, content, pos);
             let mut start_col = node.start_position().column as u32;
@@ -205,7 +205,6 @@ fn get_item_from_pos(
                 "init_parameter" => try_const_item_from_str(text),
                 "string" => {
                     if tag.attributes.get("name") == Some(&"component".to_string()) {
-                        let text = js::resolve_component_text(index, text)?;
                         let text = js::resolve_component_text(index, text, &path.get_area())?;
                         js::text_to_component(index, text, path)
                     } else {
@@ -646,6 +645,28 @@ mod test {
 
         let item = item.unwrap();
         assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_get_current_position_path_between_start_and_end_tag() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <page>
+                <body>
+                    <referenceBlock name="checkout.root">
+                        <arguments>
+                            <argument name="jsLayout" xsi:type="array">
+                                <item name="component" xsi:type="string">|</item>
+                            </argument>
+                        </arguments>
+                    </referenceBlock>
+                </body>
+            </page>
+            "#,
+        );
+
+        let item = dbg!(item).unwrap();
+        assert!(item.tag.is_some());
     }
 
     #[test]
