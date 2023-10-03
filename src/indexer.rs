@@ -9,7 +9,25 @@ use std::{
 use lsp_types::Position;
 use parking_lot::Mutex;
 
-use crate::{js, m2::M2Item, php, xml};
+use crate::{
+    js,
+    m2::{M2Area, M2Item},
+    php, xml,
+};
+
+trait HashMapId {
+    fn id(&self) -> usize;
+}
+
+impl HashMapId for M2Area {
+    fn id(&self) -> usize {
+        match self {
+            Self::Frontend => 0,
+            Self::Adminhtml => 1,
+            Self::Base => 2,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Indexer {
@@ -18,7 +36,7 @@ pub struct Indexer {
     magento_module_paths: HashMap<String, PathBuf>,
     magento_front_themes: HashMap<String, PathBuf>,
     magento_admin_themes: HashMap<String, PathBuf>,
-    js_maps: HashMap<String, String>,
+    js_maps: [HashMap<String, String>; 3],
     js_mixins: HashMap<String, String>,
     workspaces: Vec<PathBuf>,
 }
@@ -34,7 +52,7 @@ impl Indexer {
             magento_module_paths: HashMap::new(),
             magento_front_themes: HashMap::new(),
             magento_admin_themes: HashMap::new(),
-            js_maps: HashMap::new(),
+            js_maps: [HashMap::new(), HashMap::new(), HashMap::new()],
             js_mixins: HashMap::new(),
             workspaces: vec![],
         }
@@ -91,15 +109,15 @@ impl Indexer {
         self.magento_front_themes.insert(name.to_string(), path);
     }
 
-    pub fn get_component_map(&self, name: &str) -> Option<&String> {
-        self.js_maps.get(name)
+    pub fn get_component_map(&self, name: &str, area: &M2Area) -> Option<&String> {
+        self.js_maps[area.id()].get(name)
     }
 
-    pub fn add_component_map<S>(&mut self, name: &str, val: S) -> Option<String>
+    pub fn add_component_map<S>(&mut self, name: &str, val: S, area: M2Area) -> Option<String>
     where
         S: Into<String>,
     {
-        self.js_maps.insert(name.to_string(), val.into())
+        self.js_maps[area.id()].insert(name.to_string(), val.into())
     }
 
     pub fn add_component_mixin<S>(&mut self, name: &str, val: S) -> Option<String>
