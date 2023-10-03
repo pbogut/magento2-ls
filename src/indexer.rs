@@ -120,7 +120,7 @@ impl Indexer {
             .collect()
     }
 
-    pub fn add_component_map<S>(&mut self, name: &str, val: S, area: M2Area) -> Option<String>
+    pub fn add_component_map<S>(&mut self, name: &str, val: S, area: &M2Area) -> Option<String>
     where
         S: Into<String>,
     {
