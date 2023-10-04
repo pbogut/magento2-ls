@@ -10,7 +10,7 @@ use crate::{
     js,
     m2::{M2Area, M2Item, M2Path},
     queries,
-    ts::{get_node_text, get_node_text_before_pos, node_at_position},
+    ts::{get_node_text, get_node_text_before_pos, node_at_position, node_last_child},
 };
 
 #[allow(clippy::module_name_repetitions)]
@@ -79,6 +79,11 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
         let node = m.captures[i].node;
         if node_at_position(node, pos) {
             let mut text = get_node_text_before_pos(node, content, pos);
+            if node.kind() == ">" && text.is_empty() {
+                // this is end of tag node but if text is empty
+                // the tag is not really closed yet, just should be
+                continue;
+            }
             let mut start_col = node.start_position().column as u32;
             if node.kind() == "quoted_attribute_value" {
                 if text == "\"" {
@@ -87,6 +92,10 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
                 } else {
                     continue;
                 }
+            }
+            if node.kind() == ">" && text == ">" {
+                start_col += 1;
+                text = String::new();
             }
             let path = node_to_path(node, content)?;
             let tag = node_to_tag(node, content);
@@ -107,6 +116,23 @@ pub fn get_current_position_path(content: &str, pos: Position) -> Option<XmlComp
     }
     None
 }
+
+// fn node_dive_in<'a>(node: Option<Node<'a>>, list: &mut Vec<Node<'a>>) {
+//     if node.is_none() {
+//         return;
+//     }
+//     if let Some(n) = node {
+//         list.push(n.clone());
+//         node_dive_in(n.child(0), list);
+//         node_dive_in(n.next_sibling(), list);
+//     }
+// }
+
+// fn node_walk_forward(node: Node) -> Vec<Node> {
+//     let mut list = vec![];
+//     node_dive_in(Some(node), &mut list);
+//     list
+// }
 
 fn node_walk_back(node: Node) -> Option<Node> {
     node.prev_sibling().map_or_else(|| node.parent(), Some)
@@ -138,6 +164,21 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
     let mut current_node = node;
     let mut has_attr = false;
     let mut node_ids = vec![];
+    let mut on_text_node = false;
+    let mut pop_last = false;
+    let text = get_node_text(node, content);
+    if node.kind() == ">" && text == ">" {
+        on_text_node = true;
+    }
+
+    if node.kind() == "text" && node.prev_sibling().is_some() {
+        if let Some(last) = node_last_child(node.prev_sibling()?) {
+            if last.kind() == ">" && get_node_text(last, content) == ">" {
+                on_text_node = true;
+            }
+        }
+    }
+
     while let Some(node) = node_walk_back(current_node) {
         current_node = node;
         if node_ids.contains(&node.id()) {
@@ -145,8 +186,8 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
         }
         node_ids.push(node.id());
         if node.kind() == "attribute_name" && !has_attr {
-            has_attr = true;
             let attr_name = get_node_text(node, content);
+            has_attr = true;
             path.push((node.kind(), attr_name));
         } else if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
             if node.child(0).is_some() {
@@ -155,15 +196,29 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
                 }
                 path.push((node.kind(), get_node_text(node.child(1)?, content)));
             }
-        } else if node.kind() == "tag_name" {
+        } else if node.kind() == "tag_name" && node.parent()?.kind() != "end_tag" {
             path.push((node.kind(), get_node_text(node, content)));
+        } else if node.kind() == "tag_name" && node.parent()?.kind() == "end_tag" {
+            pop_last = true;
+            on_text_node = false;
         }
     }
     path.reverse();
+    if pop_last {
+        path.pop();
+    }
+    if on_text_node {
+        path.push(("text", "[$text]".into()));
+    }
     let mut result = String::new();
     for (kind, name) in path {
         match kind {
-            "attribute_name" => result.push_str(&format!("[@{}]", name)),
+            "text" => result.push_str(&name),
+            "attribute_name" => {
+                result.push_str("[@");
+                result.push_str(&name);
+                result.push(']');
+            }
             "self_closing_tag" | "start_tag" | "tag_name" => {
                 result.push_str(&format!("/{}", &name));
             }
@@ -248,6 +303,8 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
             }
             "attribute_name" => {
                 last_attribute_name = get_node_text(node, content);
+                tag.attributes
+                    .insert(last_attribute_name.clone(), String::new());
             }
             "attribute_value" => {
                 tag.attributes
@@ -540,7 +597,7 @@ mod test {
     }
 
     #[test]
-    fn test_get_current_position_path_when_starting_attribute() {
+    fn test_get_current_position_path_when_starting_inside_attribute() {
         let item = get_test_position_path(
             r#"<?xml version=\"1.0\"?>
             <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
@@ -594,6 +651,43 @@ mod test {
     }
 
     #[test]
+    fn test_get_current_position_path_when_after_empty_attribute_value() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block class=""|
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block");
+        assert_eq!(item.text, "");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_get_current_position_path_when_before_empty_attribute_value() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block class=|""
+                    <plugin name="a_b_c"
+                      type="A\B\C"/>
+                </type>
+            </config>
+            "#,
+        );
+
+        assert!(item.is_none()); // nothig to complete here
+    }
+
+    #[test]
     fn test_get_current_position_path_when_starting_inside_tag() {
         let item = get_test_position_path(
             r#"<?xml version=\"1.0\"?>
@@ -607,7 +701,7 @@ mod test {
             "#,
         );
         let item = item.unwrap();
-        assert_eq!(item.path, "/config/type/block");
+        assert_eq!(item.path, "/config/type/block[$text]");
         assert_eq!(item.text, "");
         assert!(item.tag.is_none());
     }
@@ -627,7 +721,7 @@ mod test {
         );
 
         let item = item.unwrap();
-        assert_eq!(item.path, "/config/type/block");
+        assert_eq!(item.path, "/config/type/block[$text]");
         assert_eq!(item.text, "Nan");
         assert!(item.tag.is_none());
     }
@@ -644,6 +738,8 @@ mod test {
         );
 
         let item = item.unwrap();
+        assert_eq!(item.path, "/config/item");
+        assert_eq!(item.text, "");
         assert!(item.tag.is_none());
     }
 
@@ -666,7 +762,8 @@ mod test {
         );
 
         let item = dbg!(item).unwrap();
-        assert!(item.tag.is_some());
+        assert!(item.attribute_eq("xsi:type", "string"));
+        assert!(item.attribute_eq("name", "component"));
     }
 
     #[test]
@@ -677,5 +774,189 @@ mod test {
         assert_eq!(item.name, "item");
         assert!(item.attributes.get("name").is_some());
         assert!(item.attributes.get("attribute").is_some());
+    }
+
+    #[test]
+    fn test_unfinished_xml_at_text_not_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>Nan|a
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "Nan");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_unfinished_xml_at_text_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>|
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_unfinished_xml_tag_not_closed() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block|
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert!(!item.match_path("[$text]"));
+    }
+
+    #[test]
+    fn test_unfinished_current_tag_at_text_not_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>Nan|a
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "Nan");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_unfinished_current_tag_at_text_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>|
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_unfinished_current_tag_tag_not_closed() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block|
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert!(!item.match_path("[$text]"));
+    }
+
+    #[test]
+    fn test_valid_xml_at_text_not_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>Nan|a</blocK>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "Nan");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_valid_xml_at_text_empty() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>|</block>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert_eq!(item.path, "/config/type/block[$text]");
+        assert_eq!(item.text, "");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_valid_xml_tag_not_closed() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block|</block>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = item.unwrap();
+        assert!(!item.match_path("[$text]"));
+    }
+
+    #[test]
+    fn test_valid_xml_type_after_tag() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <block>A\B\C</block>|
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = dbg!(item).unwrap();
+        assert_eq!(item.path, "/config/type");
+        assert!(item.tag.is_none());
+    }
+
+    #[test]
+    fn test_valid_xml_tag_with_underscore() {
+        let item = get_test_position_path(
+            r#"<?xml version=\"1.0\"?>
+            <config>
+                <type name="A\B\C">
+                    <source_model>asdf|</source_model>
+                </type>
+            </config>
+            "#,
+        );
+
+        let item = dbg!(item).unwrap();
+        assert!(item.match_path("/source[$text]"));
+        assert!(item.attribute_eq("_model", ""));
     }
 }
