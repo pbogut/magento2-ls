@@ -88,8 +88,18 @@ fn xml_completion_handler(
             completion_for_classes(index, &x.text, x.range)
         }
         x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
-        x if x.match_path("/source_model") => completion_for_classes(index, &x.text, x.range),
-        x if x.match_path("/backend_model") => completion_for_classes(index, &x.text, x.range),
+        // Should be /source_model[$text], but html parser dont like undersores
+        x if x.match_path("/source[$text]") && x.attribute_eq("_model", "") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        // Should be /backend_model[$text], but html parser dont like undersores
+        x if x.match_path("/backend[$text]") && x.attribute_eq("_model", "") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
+        // Should be /frontend_model[$text], but html parser dont like undersores
+        x if x.match_path("/frontend[$text]") && x.attribute_eq("_model", "") => {
+            completion_for_classes(index, &x.text, x.range)
+        }
         _ => None,
     }
 }
