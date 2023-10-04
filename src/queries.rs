@@ -140,9 +140,9 @@ pub fn xml_current_position_path() -> &'static Query {
             (tag_name) @tag_name
             (attribute_value) @attr_val
             (text) @text
-            (end_tag) @end_tag
             ((quoted_attribute_value) @q_attr_val (#eq? @q_attr_val "\"\""))
             ((quoted_attribute_value) @q_attr_val (#eq? @q_attr_val "\""))
+            ">" @tag_end
             "#,
         "html",
     )

@@ -80,3 +80,8 @@ pub fn node_at_position(node: Node, pos: Position) -> bool {
     }
     true
 }
+
+pub fn node_last_child(node: Node) -> Option<Node> {
+    let children_count = node.child_count();
+    node.child(children_count - 1)
+}
