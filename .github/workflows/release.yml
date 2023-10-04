@@ -84,6 +84,7 @@ jobs:
           mkdir -p dist
           cp "target/${{ matrix.build.TARGET }}/release/${binary_name}" "vscode/server/${binary_name}${extension}"
           cp "README.md" "vscode/"
+          cp "CHANGELOG.md" "vscode/"
           cd "vscode"
           npm install --include=dev
           npx vsce package --target ${{ matrix.build.CODE_TARGET }} -o ../dist/magento2-ls.${version}.${{ matrix.build.CODE_TARGET }}.vsix
