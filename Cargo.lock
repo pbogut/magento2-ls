@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "magento2-ls"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "bincode",

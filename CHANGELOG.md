@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.0.5 - Work in Progress]
+## [0.0.5 - October 4, 2023]
 
 #### Features
 - Added completion for PHP classes in XML files.
