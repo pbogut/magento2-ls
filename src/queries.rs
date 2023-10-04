@@ -114,7 +114,7 @@ pub fn xml_tag_at_pos() -> &'static Query {
                 (tag_name) @tag_name
                 (attribute
                     (attribute_name) @attr_name
-                    (quoted_attribute_value (attribute_value) @attr_val)
+                    (quoted_attribute_value (attribute_value) @attr_val)?
                 )?
             ) @tag
             (text)? @text
@@ -124,7 +124,7 @@ pub fn xml_tag_at_pos() -> &'static Query {
                 (tag_name) @tag_name
                 (attribute
                     (attribute_name) @attr_name
-                    (quoted_attribute_value (attribute_value) @attr_val)
+                    (quoted_attribute_value (attribute_value) @attr_val)?
                 )
             ) @tag
         )
