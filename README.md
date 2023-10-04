@@ -19,9 +19,17 @@ Please note that the current version of the language server is considered to be 
  - Go to the definition from JS files:
    - Go to the JavaScript component file (from `define()` argument list)
 
-### Planned (not implemented yet)
- - Code completion suggestions in XML files when referencing PHP classes and functions.
- - Finding of references of PHP classes/methods in XML files.
+![code-completion](https://github.com/pbogut/magento2-ls/assets/1702152/6341cf9e-2241-40c2-b374-e45d7026e1bc)
+
+- Completion of various Magento entities:
+  - Template suggestions inside `template=""` attributes.
+  - Template suggestions inside tags with `xsi:type="string"` and `name=template` attributes.
+  - Event names inside `<event name="">` attribute (static list of built-in events).
+  - PHP Class suggestions in `<preference for="">`, `<preference type="">`, `class`, and `instance` attributes.
+  - PHP Class suggestions in tags with `xsi:type="object"` attribute.
+  - PHP Class suggestions in `<backend_model/>`, `<frontend_model/>`, and `<source_model/>` tags.
+  - JS Component suggestions in tags with `xsi:type="string"` and `name="component"` attributes.
+  - JS Component suggestions in the argument list of the `define()` function in JavaScript files.
 
 ## Installation
 
