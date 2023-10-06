@@ -42,10 +42,12 @@ pub fn get_location_from_params(
             path_to_location(&path).map(|location| vec![location])
         }
         Some(M2Item::Component(comp)) => {
+            dbg!(&comp);
             let mut result = vec![];
             let workspace_paths = index.lock().workspace_paths();
             for path in workspace_paths {
                 let path = path.append(&["lib", "web", &comp]).append_ext("js");
+                dbg!(&path);
                 if let Some(location) = path_to_location(&path) {
                     result.push(location);
                 }
