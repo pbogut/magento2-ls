@@ -84,54 +84,77 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
 }
 
 pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
-    let modules = glob(&path.append(&["**", "registration.php"]).to_path_string())
-        .expect("Failed to read glob pattern");
+    // if current workspace is magento module
+    process_glob(index, &path.append(&["registration.php"]));
+    // if current workspace is magento installation
+    process_glob(
+        index,
+        &path.append(&["vendor", "*", "*", "registration.php"]),
+    );
+    process_glob(
+        index,
+        &path.append(&["app", "code", "*", "*", "registration.php"]),
+    );
+    process_glob(
+        index,
+        &path.append(&[
+            "vendor",
+            "magento",
+            "magento2-base",
+            "setup",
+            "src",
+            "Magento",
+            "Setup",
+            "registration.php",
+        ]),
+    );
+}
+
+fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
+    let modules = glob(&glob_path.to_path_string())
+        .expect("Failed to read glob pattern")
+        .filter_map(Result::ok);
 
     let query = queries::php_registration();
-    for moule_registration in modules {
-        moule_registration.map_or_else(
-            |_e| panic!("buhu"),
-            |file_path| {
-                if file_path.is_test() {
-                    return;
+    for file_path in modules {
+        if file_path.is_test() {
+            return;
+        }
+
+        let content =
+            std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
+
+        let tree = tree_sitter_parsers::parse(&content, "php");
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
+        for m in matches {
+            let mod_name = get_node_text(m.captures[1].node, &content);
+            let mod_name = mod_name.trim_matches('"').trim_matches('\'');
+
+            let mut parent = file_path.clone();
+            parent.pop();
+
+            index.lock().add_module_path(mod_name, parent.clone());
+
+            match register_param_to_module(mod_name) {
+                Some(M2Module::Module(m)) => {
+                    index
+                        .lock()
+                        .add_module(mod_name)
+                        .add_module_path(&m, parent);
                 }
-
-                let content = std::fs::read_to_string(&file_path)
-                    .expect("Should have been able to read the file");
-
-                let tree = tree_sitter_parsers::parse(&content, "php");
-                let mut cursor = QueryCursor::new();
-                let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
-                for m in matches {
-                    let mod_name = get_node_text(m.captures[1].node, &content);
-                    let mod_name = mod_name.trim_matches('"').trim_matches('\'');
-
-                    let mut parent = file_path.clone();
-                    parent.pop();
-
-                    index.lock().add_module_path(mod_name, parent.clone());
-
-                    match register_param_to_module(mod_name) {
-                        Some(M2Module::Module(m)) => {
-                            index
-                                .lock()
-                                .add_module(mod_name)
-                                .add_module_path(&m, parent);
-                        }
-                        Some(M2Module::Library(l)) => {
-                            index.lock().add_module_path(&l, parent);
-                        }
-                        Some(M2Module::FrontTheme(t)) => {
-                            index.lock().add_front_theme_path(&t, parent);
-                        }
-                        Some(M2Module::AdminTheme(t)) => {
-                            index.lock().add_admin_theme_path(&t, parent);
-                        }
-                        _ => (),
-                    }
+                Some(M2Module::Library(l)) => {
+                    index.lock().add_module_path(&l, parent);
                 }
-            },
-        );
+                Some(M2Module::FrontTheme(t)) => {
+                    index.lock().add_front_theme_path(&t, parent);
+                }
+                Some(M2Module::AdminTheme(t)) => {
+                    index.lock().add_admin_theme_path(&t, parent);
+                }
+                _ => (),
+            }
+        }
     }
 }
 

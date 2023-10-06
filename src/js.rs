@@ -32,19 +32,37 @@ pub struct JsCompletion {
 }
 
 pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
-    let modules = glob(&path.append(&["**", "requirejs-config.js"]).to_path_string())
-        .expect("Failed to read glob pattern");
+    // if current workspace is magento module
+    process_glob(index, &path.append(&["view", "*", "requirejs-config.js"]));
+    // if current workspace is magento installation
+    process_glob(
+        index,
+        &path.append(&["vendor", "*", "*", "view", "*", "requirejs-config.js"]),
+    );
+    process_glob(
+        index,
+        &path.append(&["vendor", "*", "*", "Magento_Theme", "requirejs-config.js"]),
+    );
+    process_glob(
+        index,
+        &path.append(&["app", "code", "*", "*", "view", "*", "requirejs-config.js"]),
+    );
+    process_glob(
+        index,
+        &path.append(&["app", "design", "**", "requirejs-config.js"]),
+    );
+}
 
-    for require_config in modules {
-        require_config.map_or_else(
-            |_e| panic!("buhu"),
-            |file_path| {
-                let content = std::fs::read_to_string(&file_path)
-                    .expect("Should have been able to read the file");
+fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
+    let modules = glob(&glob_path.to_path_string())
+        .expect("Failed to read glob pattern")
+        .filter_map(Result::ok);
 
-                update_index_from_config(index, &content, &file_path.get_area());
-            },
-        );
+    for file_path in modules {
+        let content =
+            std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
+
+        update_index_from_config(index, &content, &file_path.get_area());
     }
 }
 
