@@ -9,14 +9,14 @@ use lsp_types::{
 };
 
 use crate::{
-    indexer::ArcIndexer,
     js::{self, JsCompletionType},
     m2::{self, M2Area, M2Path, M2Uri},
+    state::ArcState,
     xml,
 };
 
 pub fn get_completion_from_params(
-    index: &ArcIndexer,
+    state: &ArcState,
     params: &CompletionParams,
 ) -> Option<Vec<CompletionItem>> {
     let path = params
@@ -25,17 +25,17 @@ pub fn get_completion_from_params(
         .uri
         .to_path_buf();
     let pos = params.text_document_position.position;
-    let content = index.lock().get_file(&path)?.clone();
+    let content = state.lock().get_file(&path)?.clone();
 
     match path.get_ext().as_str() {
-        "xml" => xml_completion_handler(index, &content, &path, pos),
-        "js" => js_completion_handler(index, &content, &path, pos),
+        "xml" => xml_completion_handler(state, &content, &path, pos),
+        "js" => js_completion_handler(state, &content, &path, pos),
         _ => None,
     }
 }
 
 fn js_completion_handler(
-    index: &ArcIndexer,
+    state: &ArcState,
     content: &str,
     path: &PathBuf,
     pos: Position,
@@ -44,7 +44,7 @@ fn js_completion_handler(
 
     match at_position.kind {
         JsCompletionType::Definition => completion_for_component(
-            index,
+            state,
             &at_position.text,
             at_position.range,
             &path.get_area(),
@@ -53,7 +53,7 @@ fn js_completion_handler(
 }
 
 fn xml_completion_handler(
-    index: &ArcIndexer,
+    state: &ArcState,
     content: &str,
     path: &PathBuf,
     pos: Position,
@@ -61,77 +61,77 @@ fn xml_completion_handler(
     let at_position = xml::get_current_position_path(content, pos)?;
     match at_position {
         x if x.match_path("[@template]") => {
-            completion_for_template(index, &x.text, x.range, &path.get_area())
+            completion_for_template(state, &x.text, x.range, &path.get_area())
         }
         x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "template") => {
-            completion_for_template(index, &x.text, x.range, &path.get_area())
+            completion_for_template(state, &x.text, x.range, &path.get_area())
         }
         x if x.attribute_eq("xsi:type", "string") && x.attribute_eq("name", "component") => {
-            completion_for_component(index, &x.text, x.range, &path.get_area())
+            completion_for_component(state, &x.text, x.range, &path.get_area())
         }
         x if x.match_path("/config/event[@name]") && path.ends_with("events.xml") => {
             Some(events::get_completion_items(x.range))
         }
         x if x.match_path("/config/preference[@for]") && path.ends_with("di.xml") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         x if x.match_path("/config/preference[@type]") && path.ends_with("di.xml") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         x if x.match_path("/virtualType[@type]") && path.ends_with("di.xml") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         x if x.match_path("[@class]") || x.match_path("[@instance]") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         x if x.attribute_in("xsi:type", &["object", "const", "init_parameter"]) => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
-        x if x.match_path("/type[@name]") => completion_for_classes(index, &x.text, x.range),
+        x if x.match_path("/type[@name]") => completion_for_classes(state, &x.text, x.range),
         // Should be /source_model[$text], but html parser dont like undersores
         x if x.match_path("/source[$text]") && x.attribute_eq("_model", "") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         // Should be /backend_model[$text], but html parser dont like undersores
         x if x.match_path("/backend[$text]") && x.attribute_eq("_model", "") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         // Should be /frontend_model[$text], but html parser dont like undersores
         x if x.match_path("/frontend[$text]") && x.attribute_eq("_model", "") => {
-            completion_for_classes(index, &x.text, x.range)
+            completion_for_classes(state, &x.text, x.range)
         }
         _ => None,
     }
 }
 
 fn completion_for_classes(
-    index: &ArcIndexer,
+    state: &ArcState,
     text: &str,
     range: Range,
 ) -> Option<Vec<CompletionItem>> {
     let text = text.trim_start_matches('\\');
     if text.is_empty() || (m2::is_part_of_class_name(text) && text.matches('\\').count() == 0) {
-        Some(completion_for_classes_prefix(index, range))
+        Some(completion_for_classes_prefix(state, range))
     } else if text.matches('\\').count() == 1 {
-        let mut result = completion_for_classes_prefix(index, range);
-        if let Some(classes) = completion_for_classes_full(index, text, range) {
+        let mut result = completion_for_classes_prefix(state, range);
+        if let Some(classes) = completion_for_classes_full(state, text, range) {
             result.extend(classes);
         }
         Some(result)
     } else if text.matches('\\').count() >= 2 {
-        completion_for_classes_full(index, text, range)
+        completion_for_classes_full(state, text, range)
     } else {
         None
     }
 }
 
-fn completion_for_classes_prefix(index: &ArcIndexer, range: Range) -> Vec<CompletionItem> {
-    let module_prefixes = index.lock().get_module_class_prefixes();
+fn completion_for_classes_prefix(state: &ArcState, range: Range) -> Vec<CompletionItem> {
+    let module_prefixes = state.lock().get_module_class_prefixes();
     string_vec_and_range_to_completion_list(module_prefixes, range)
 }
 
 fn completion_for_classes_full(
-    index: &ArcIndexer,
+    state: &ArcState,
     text: &str,
     range: Range,
 ) -> Option<Vec<CompletionItem>> {
@@ -144,7 +144,7 @@ fn completion_for_classes_full(
     let typed_class_prefix = parts.join("\\");
 
     let module_class = module_name.replace('_', "\\");
-    let module_path = index.lock().get_module_path(&module_name)?;
+    let module_path = state.lock().get_module_path(&module_name)?;
     let candidates = glob(module_path.append(&["**", "*.php"]).to_path_str())
         .expect("Failed to read glob pattern");
     let mut classes = vec![];
@@ -168,17 +168,17 @@ fn completion_for_classes_full(
 }
 
 fn completion_for_template(
-    index: &ArcIndexer,
+    state: &ArcState,
     text: &str,
     range: Range,
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
     if text.is_empty() || m2::is_part_of_module_name(text) {
-        let modules = index.lock().get_modules();
+        let modules = state.lock().get_modules();
         Some(string_vec_and_range_to_completion_list(modules, range))
     } else if text.contains("::") {
         let module_name = text.split("::").next()?;
-        let path = index.lock().get_module_path(module_name);
+        let path = state.lock().get_module_path(module_name);
         match path {
             None => None,
             Some(path) => {
@@ -204,7 +204,7 @@ fn completion_for_template(
 }
 
 fn completion_for_component(
-    index: &ArcIndexer,
+    state: &ArcState,
     text: &str,
     range: Range,
     area: &M2Area,
@@ -212,7 +212,7 @@ fn completion_for_component(
     if text.contains('/') {
         let module_name = text.split('/').next()?;
         let mut files = vec![];
-        if let Some(path) = index.lock().get_module_path(module_name) {
+        if let Some(path) = state.lock().get_module_path(module_name) {
             for area in area.path_candidates() {
                 let view_path = path.append(&["view", area, "web"]);
                 let glob_path = view_path.append(&["**", "*.js"]);
@@ -227,7 +227,7 @@ fn completion_for_component(
                 }));
             }
         }
-        let workspaces = index.lock().workspace_paths();
+        let workspaces = state.lock().workspace_paths();
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);
@@ -241,19 +241,19 @@ fn completion_for_component(
             }));
         }
 
-        files.extend(index.lock().get_component_maps_for_area(area));
+        files.extend(state.lock().get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
-            files.extend(index.lock().get_component_maps_for_area(&lower_area));
+            files.extend(state.lock().get_component_maps_for_area(&lower_area));
         }
         Some(string_vec_and_range_to_completion_list(files, range))
     } else {
         let mut modules = vec![];
-        modules.extend(index.lock().get_modules());
-        modules.extend(index.lock().get_component_maps_for_area(area));
+        modules.extend(state.lock().get_modules());
+        modules.extend(state.lock().get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
-            modules.extend(index.lock().get_component_maps_for_area(&lower_area));
+            modules.extend(state.lock().get_component_maps_for_area(&lower_area));
         }
-        let workspaces = index.lock().workspace_paths();
+        let workspaces = state.lock().workspace_paths();
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);

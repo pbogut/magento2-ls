@@ -1,9 +1,9 @@
-mod indexer;
 mod js;
 mod lsp;
 mod m2;
 mod php;
 mod queries;
+mod state;
 mod ts;
 mod xml;
 
@@ -19,7 +19,7 @@ use lsp_types::{
     WorkDoneProgressOptions,
 };
 
-use crate::{indexer::Indexer, m2::M2Uri};
+use crate::{m2::M2Uri, state::State};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Note that  we must have our logging only write out to stderr.
@@ -78,18 +78,18 @@ fn main_loop(
     let params: InitializeParams =
         serde_json::from_value(init_params).context("Deserializing initialize params")?;
 
-    let indexer = Indexer::new().into_arc();
+    let state = State::new().into_arc();
     let mut threads = vec![];
 
     if let Some(uri) = params.root_uri {
         let path = uri.to_file_path().expect("Invalid root path");
-        threads.extend(Indexer::update_index(&indexer, &path));
+        threads.extend(State::update_index(&state, &path));
     };
 
     if let Some(folders) = params.workspace_folders {
         for folder in folders {
             let path = folder.uri.to_file_path().expect("Invalid workspace path");
-            threads.extend(Indexer::update_index(&indexer, &path));
+            threads.extend(State::update_index(&state, &path));
         }
     }
 
@@ -105,12 +105,12 @@ fn main_loop(
                 match req.method.as_str() {
                     "textDocument/completion" => {
                         let (id, params) = cast::<Completion>(req)?;
-                        let result = lsp::completion_handler(&indexer, &params);
+                        let result = lsp::completion_handler(&state, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     "textDocument/definition" => {
                         let (id, params) = cast::<GotoDefinition>(req)?;
-                        let result = lsp::definition_handler(&indexer, &params);
+                        let result = lsp::definition_handler(&state, &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     _ => {
@@ -127,7 +127,7 @@ fn main_loop(
                     let params: DidOpenTextDocumentParams = serde_json::from_value(not.params)
                         .context("Deserializing notification params")?;
                     let path = params.text_document.uri.to_path_buf();
-                    indexer.lock().set_file(&path, params.text_document.text);
+                    state.lock().set_file(&path, params.text_document.text);
                     #[cfg(debug_assertions)]
                     eprintln!("textDocument/didOpen: {path:?}");
                 }
@@ -135,7 +135,7 @@ fn main_loop(
                     let params: DidChangeTextDocumentParams = serde_json::from_value(not.params)
                         .context("Deserializing notification params")?;
                     let path = params.text_document.uri.to_path_buf();
-                    indexer
+                    state
                         .lock()
                         .set_file(&path, &params.content_changes[0].text);
                     #[cfg(debug_assertions)]
@@ -145,7 +145,7 @@ fn main_loop(
                     let params: DidCloseTextDocumentParams = serde_json::from_value(not.params)
                         .context("Deserializing notification params")?;
                     let path = params.text_document.uri.to_path_buf();
-                    indexer.lock().del_file(&path);
+                    state.lock().del_file(&path);
                     #[cfg(debug_assertions)]
                     eprintln!("textDocument/didClose: {path:?}");
                 }

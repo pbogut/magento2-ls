@@ -30,7 +30,7 @@ impl HashMapId for M2Area {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Indexer {
+pub struct State {
     buffers: HashMap<PathBuf, String>,
     magento_modules: Vec<String>,
     magento_module_paths: HashMap<String, PathBuf>,
@@ -42,9 +42,9 @@ pub struct Indexer {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub type ArcIndexer = Arc<Mutex<Indexer>>;
+pub type ArcState = Arc<Mutex<State>>;
 
-impl Indexer {
+impl State {
     pub fn new() -> Self {
         Self {
             buffers: HashMap::new(),
@@ -175,19 +175,19 @@ impl Indexer {
         }
     }
 
-    pub fn into_arc(self) -> ArcIndexer {
+    pub fn into_arc(self) -> ArcState {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn update_index(arc_index: &ArcIndexer, path: &Path) -> Vec<JoinHandle<()>> {
-        let mut index = arc_index.lock();
-        if index.has_workspace_path(path) {
+    pub fn update_index(arc_state: &ArcState, path: &Path) -> Vec<JoinHandle<()>> {
+        let mut state = arc_state.lock();
+        if state.has_workspace_path(path) {
             vec![]
         } else {
-            index.add_workspace_path(path);
+            state.add_workspace_path(path);
             vec![
-                spawn_index(arc_index, path, php::update_index, "PHP Indexing"),
-                spawn_index(arc_index, path, js::update_index, "JS Indexing"),
+                spawn_index(arc_state, path, php::update_index, "PHP Indexing"),
+                spawn_index(arc_state, path, js::update_index, "JS Indexing"),
             ]
         }
     }
@@ -213,19 +213,19 @@ impl Indexer {
 }
 
 fn spawn_index(
-    arc_indexer: &ArcIndexer,
+    state: &ArcState,
     path: &Path,
-    callback: fn(&ArcIndexer, &PathBuf),
+    callback: fn(&ArcState, &PathBuf),
     msg: &str,
 ) -> JoinHandle<()> {
-    let index = Arc::clone(arc_indexer);
+    let state = Arc::clone(state);
     let path = path.to_path_buf();
     let msg = msg.to_owned();
 
     spawn(move || {
         eprintln!("Start {}", msg);
         let index_start = SystemTime::now();
-        callback(&index, &path);
+        callback(&state, &path);
         index_start.elapsed().map_or_else(
             |_| eprintln!("{} done", msg),
             |d| eprintln!("{} done in {:?}", msg, d),

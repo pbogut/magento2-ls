@@ -6,9 +6,9 @@ use lsp_types::{Position, Range, Url};
 use tree_sitter::{Node, QueryCursor};
 
 use crate::{
-    indexer::ArcIndexer,
     m2::M2Path,
     queries,
+    state::ArcState,
     ts::{self, get_range_from_node},
 };
 
@@ -77,20 +77,20 @@ fn register_param_to_module(param: &str) -> Option<M2Module> {
     }
 }
 
-pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
+pub fn update_index(state: &ArcState, path: &PathBuf) {
     // if current workspace is magento module
-    process_glob(index, &path.append(&["registration.php"]));
+    process_glob(state, &path.append(&["registration.php"]));
     // if current workspace is magento installation
     process_glob(
-        index,
+        state,
         &path.append(&["vendor", "*", "*", "registration.php"]),
     );
     process_glob(
-        index,
+        state,
         &path.append(&["app", "code", "*", "*", "registration.php"]),
     );
     process_glob(
-        index,
+        state,
         &path.append(&[
             "vendor",
             "magento",
@@ -104,7 +104,7 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
     );
 }
 
-fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
+fn process_glob(state: &ArcState, glob_path: &PathBuf) {
     let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
@@ -129,20 +129,20 @@ fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
             let mut parent = file_path.clone();
             parent.pop();
 
-            index.lock().add_module_path(mod_name, parent.clone());
+            state.lock().add_module_path(mod_name, parent.clone());
 
             match register_param_to_module(mod_name) {
                 Some(M2Module::Module(m)) => {
-                    index.lock().add_module(mod_name).add_module_path(m, parent);
+                    state.lock().add_module(mod_name).add_module_path(m, parent);
                 }
                 Some(M2Module::Library(l)) => {
-                    index.lock().add_module_path(l, parent);
+                    state.lock().add_module_path(l, parent);
                 }
                 Some(M2Module::FrontTheme(t)) => {
-                    index.lock().add_front_theme_path(t, parent);
+                    state.lock().add_front_theme_path(t, parent);
                 }
                 Some(M2Module::AdminTheme(t)) => {
-                    index.lock().add_admin_theme_path(t, parent);
+                    state.lock().add_admin_theme_path(t, parent);
                 }
                 _ => (),
             }

@@ -5,9 +5,9 @@ use lsp_types::{Position, Range};
 use tree_sitter::{Node, QueryCursor};
 
 use crate::{
-    indexer::{ArcIndexer, Indexer},
     m2::{M2Area, M2Item, M2Path},
     queries,
+    state::{ArcState, State},
     ts::{self, node_at_position},
 };
 
@@ -31,29 +31,29 @@ pub struct JsCompletion {
     pub kind: JsCompletionType,
 }
 
-pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
+pub fn update_index(state: &ArcState, path: &PathBuf) {
     // if current workspace is magento module
-    process_glob(index, &path.append(&["view", "*", "requirejs-config.js"]));
+    process_glob(state, &path.append(&["view", "*", "requirejs-config.js"]));
     // if current workspace is magento installation
     process_glob(
-        index,
+        state,
         &path.append(&["vendor", "*", "*", "view", "*", "requirejs-config.js"]),
     );
     process_glob(
-        index,
+        state,
         &path.append(&["vendor", "*", "*", "Magento_Theme", "requirejs-config.js"]),
     );
     process_glob(
-        index,
+        state,
         &path.append(&["app", "code", "*", "*", "view", "*", "requirejs-config.js"]),
     );
     process_glob(
-        index,
+        state,
         &path.append(&["app", "design", "**", "requirejs-config.js"]),
     );
 }
 
-fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
+fn process_glob(state: &ArcState, glob_path: &PathBuf) {
     let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
@@ -62,7 +62,7 @@ fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
         let content =
             std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
 
-        update_index_from_config(index, &content, &file_path.get_area());
+        update_index_from_config(state, &content, &file_path.get_area());
     }
 }
 
@@ -99,12 +99,12 @@ pub fn get_completion_item(content: &str, pos: Position) -> Option<JsCompletion>
     None
 }
 
-pub fn get_item_from_position(index: &Indexer, path: &PathBuf, pos: Position) -> Option<M2Item> {
-    let content = index.get_file(path)?;
-    get_item_from_pos(index, content, path, pos)
+pub fn get_item_from_position(state: &State, path: &PathBuf, pos: Position) -> Option<M2Item> {
+    let content = state.get_file(path)?;
+    get_item_from_pos(state, content, path, pos)
 }
 
-fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position) -> Option<M2Item> {
+fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -> Option<M2Item> {
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_item_from_pos();
     let mut cursor = QueryCursor::new();
@@ -113,8 +113,8 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
     for m in matches {
         if node_at_position(m.captures[1].node, pos) {
             let text = get_node_text(m.captures[1].node, content);
-            let text = resolve_component_text(index, text, &path.to_path_buf().get_area())?;
-            return text_to_component(index, text, path);
+            let text = resolve_component_text(state, text, &path.to_path_buf().get_area())?;
+            return text_to_component(state, text, path);
         }
     }
 
@@ -122,20 +122,20 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
 }
 
 pub fn resolve_component_text<'a>(
-    index: &'a Indexer,
+    state: &'a State,
     text: &'a str,
     area: &M2Area,
 ) -> Option<&'a str> {
-    index.get_component_map(text, area).map_or_else(
+    state.get_component_map(text, area).map_or_else(
         || {
             area.lower_area()
-                .map_or_else(|| Some(text), |a| resolve_component_text(index, text, &a))
+                .map_or_else(|| Some(text), |a| resolve_component_text(state, text, &a))
         },
-        |t| resolve_component_text(index, t, area),
+        |t| resolve_component_text(state, t, area),
     )
 }
 
-pub fn text_to_component(index: &Indexer, text: &str, path: &Path) -> Option<M2Item> {
+pub fn text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
     if begining.chars().next().unwrap_or('a') == '.' {
@@ -148,7 +148,7 @@ pub fn text_to_component(index: &Indexer, text: &str, path: &Path) -> Option<M2I
     {
         let mut parts = text.splitn(2, '/');
         let mod_name = parts.next()?.to_string();
-        let mod_path = index.get_module_path(&mod_name)?;
+        let mod_path = state.get_module_path(&mod_name)?;
         Some(M2Item::ModComponent(
             mod_name,
             parts.next()?.into(),
@@ -159,7 +159,7 @@ pub fn text_to_component(index: &Indexer, text: &str, path: &Path) -> Option<M2I
     }
 }
 
-fn update_index_from_config(index: &ArcIndexer, content: &str, area: &M2Area) {
+fn update_index_from_config(state: &ArcState, content: &str, area: &M2Area) {
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_require_config();
 
@@ -169,14 +169,11 @@ fn update_index_from_config(index: &ArcIndexer, content: &str, area: &M2Area) {
     for m in matches {
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
-        {
-            let mut index = index.lock();
-            match get_kind(m.captures[1].node, content) {
-                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(key, val, area),
-                Some(JSTypes::Mixins) => index.add_component_mixin(key, val),
-                None => continue,
-            };
-        }
+        match get_kind(m.captures[1].node, content) {
+            Some(JSTypes::Map | JSTypes::Paths) => state.lock().add_component_map(key, val, area),
+            Some(JSTypes::Mixins) => state.lock().add_component_mixin(key, val),
+            None => continue,
+        };
     }
 }
 
@@ -213,7 +210,7 @@ mod test {
 
     #[test]
     fn test_update_index_from_config() {
-        let index = Indexer::new();
+        let state = State::new();
         let content = r#"
         var config = {
             map: {
@@ -239,10 +236,10 @@ mod test {
         };
         "#;
 
-        let arc_index = index.into_arc();
-        update_index_from_config(&arc_index, content, &M2Area::Base);
+        let arc_state = state.into_arc();
+        update_index_from_config(&arc_state, content, &M2Area::Base);
 
-        let mut result = Indexer::new();
+        let mut result = State::new();
         result.add_component_map(
             "other/core/extension",
             "Other_Module/js/core_ext",
@@ -262,8 +259,7 @@ mod test {
         result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
 
-        // FIX fix test without using to_owned
-        // assert_eq!(arc_index.lock().to_owned(), result);
+        assert_eq!(arc_state.lock().to_owned(), result);
     }
 
     #[test]
@@ -328,8 +324,8 @@ mod test {
         }
         let pos = Position { line, character };
         let uri = PathBuf::from(if cfg!(windows) { &win_path } else { path });
-        let mut index = Indexer::new();
-        index.add_module_path("Some_Module", PathBuf::from("/a/b/c/Some_Module"));
-        get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
+        let mut state = State::new();
+        state.add_module_path("Some_Module", PathBuf::from("/a/b/c/Some_Module"));
+        get_item_from_pos(&state, &xml.replace('|', ""), &uri, pos)
     }
 }
