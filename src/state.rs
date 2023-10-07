@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 
 use crate::{
     js,
-    m2::{M2Area, M2Item},
+    m2::{M2Area, M2Item, M2Path},
     php, xml,
 };
 
@@ -168,7 +168,7 @@ impl State {
     }
 
     pub fn get_item_from_position(&self, path: &PathBuf, pos: Position) -> Option<M2Item> {
-        match path.extension()?.to_str()?.to_lowercase().as_str() {
+        match path.get_ext().as_str() {
             "js" => js::get_item_from_position(self, path, pos),
             "xml" => xml::get_item_from_position(self, path, pos),
             _ => None,
