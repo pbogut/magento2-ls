@@ -10,7 +10,7 @@ use crate::{
     js,
     m2::{M2Area, M2Item, M2Path},
     queries,
-    ts::{get_node_text, get_node_text_before_pos, node_at_position, node_last_child},
+    ts::{get_node_str, get_node_text_before_pos, node_at_position, node_last_child},
 };
 
 #[allow(clippy::module_name_repetitions)]
@@ -143,12 +143,12 @@ fn node_to_tag(node: Node, content: &str) -> Option<XmlTag> {
     while let Some(node) = node_walk_back(current_node) {
         current_node = node;
         if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
-            let text = get_node_text(node, content);
+            let text = get_node_str(node, content);
             if text.chars().last()? != '>' {
                 return None;
             }
             return get_xml_tag_at_pos(
-                &text,
+                text,
                 Position {
                     line: 0,
                     character: 0,
@@ -166,14 +166,14 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
     let mut node_ids = vec![];
     let mut on_text_node = false;
     let mut pop_last = false;
-    let text = get_node_text(node, content);
+    let text = get_node_str(node, content);
     if node.kind() == ">" && text == ">" {
         on_text_node = true;
     }
 
     if node.kind() == "text" && node.prev_sibling().is_some() {
         if let Some(last) = node_last_child(node.prev_sibling()?) {
-            if last.kind() == ">" && get_node_text(last, content) == ">" {
+            if last.kind() == ">" && get_node_str(last, content) == ">" {
                 on_text_node = true;
             }
         }
@@ -186,7 +186,7 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
         }
         node_ids.push(node.id());
         if node.kind() == "attribute_name" && !has_attr {
-            let attr_name = get_node_text(node, content);
+            let attr_name = get_node_str(node, content);
             has_attr = true;
             path.push((node.kind(), attr_name));
         } else if node.kind() == "self_closing_tag" || node.kind() == "start_tag" {
@@ -194,10 +194,10 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
                 if node_ids.contains(&node.child(0)?.id()) {
                     continue;
                 }
-                path.push((node.kind(), get_node_text(node.child(1)?, content)));
+                path.push((node.kind(), get_node_str(node.child(1)?, content)));
             }
         } else if node.kind() == "tag_name" && node.parent()?.kind() != "end_tag" {
-            path.push((node.kind(), get_node_text(node, content)));
+            path.push((node.kind(), get_node_str(node, content)));
         } else if node.kind() == "tag_name" && node.parent()?.kind() == "end_tag" {
             pop_last = true;
             on_text_node = false;
@@ -208,19 +208,19 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
         path.pop();
     }
     if on_text_node {
-        path.push(("text", "[$text]".into()));
+        path.push(("text", "[$text]"));
     }
     let mut result = String::new();
     for (kind, name) in path {
         match kind {
-            "text" => result.push_str(&name),
+            "text" => result.push_str(name),
             "attribute_name" => {
                 result.push_str("[@");
-                result.push_str(&name);
+                result.push_str(name);
                 result.push(']');
             }
             "self_closing_tag" | "start_tag" | "tag_name" => {
-                result.push_str(&format!("/{}", &name));
+                result.push_str(&format!("/{}", name));
             }
 
             _ => (),
@@ -259,7 +259,7 @@ fn get_item_from_pos(
                 "object" => Some(get_class_item_from_str(text)),
                 "init_parameter" => try_const_item_from_str(text),
                 "string" => {
-                    if tag.attributes.get("name") == Some(&"component".to_string()) {
+                    if tag.attributes.get("name").is_some_and(|s| s == "component") {
                         let text = js::resolve_component_text(index, text, &path.get_area())?;
                         js::text_to_component(index, text, path)
                     } else {
@@ -280,7 +280,7 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
     let mut cursor = QueryCursor::new();
     let captures = cursor.captures(query, tree.root_node(), content.as_bytes());
 
-    let mut last_attribute_name = String::new();
+    let mut last_attribute_name = "";
     let mut last_tag_id: Option<usize> = None;
     let mut tag = XmlTag::new();
 
@@ -299,22 +299,24 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
         let hovered = node_at_position(node, pos);
         match node.kind() {
             "tag_name" => {
-                tag.name = get_node_text(node, content);
+                tag.name = get_node_str(node, content).into();
             }
             "attribute_name" => {
-                last_attribute_name = get_node_text(node, content);
+                last_attribute_name = get_node_str(node, content);
                 tag.attributes
-                    .insert(last_attribute_name.clone(), String::new());
+                    .insert(last_attribute_name.into(), String::new());
             }
             "attribute_value" => {
-                tag.attributes
-                    .insert(last_attribute_name.clone(), get_node_text(node, content));
+                tag.attributes.insert(
+                    last_attribute_name.into(),
+                    get_node_str(node, content).into(),
+                );
                 if hovered {
-                    tag.hover_on = XmlPart::Attribute(last_attribute_name.clone());
+                    tag.hover_on = XmlPart::Attribute(last_attribute_name.into());
                 }
             }
             "text" => {
-                tag.text = get_node_text(node, content);
+                tag.text = get_node_str(node, content).into();
                 if hovered {
                     tag.hover_on = XmlPart::Text;
                 }
@@ -345,17 +347,14 @@ fn try_any_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
 fn try_const_item_from_str(text: &str) -> Option<M2Item> {
     if text.split("::").count() == 2 {
         let mut parts = text.split("::");
-        Some(M2Item::Const(
-            parts.next()?.to_string(),
-            parts.next()?.to_string(),
-        ))
+        Some(M2Item::Const(parts.next()?.into(), parts.next()?.into()))
     } else {
         None
     }
 }
 
 fn get_class_item_from_str(text: &str) -> M2Item {
-    M2Item::Class(text.to_string())
+    M2Item::Class(text.into())
 }
 
 fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
@@ -363,16 +362,16 @@ fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
         let mut parts = text.split("::");
         match area {
             M2Area::Frontend => Some(M2Item::FrontPhtml(
-                parts.next()?.to_string(),
-                parts.next()?.to_string(),
+                parts.next()?.into(),
+                parts.next()?.into(),
             )),
             M2Area::Adminhtml => Some(M2Item::AdminPhtml(
-                parts.next()?.to_string(),
-                parts.next()?.to_string(),
+                parts.next()?.into(),
+                parts.next()?.into(),
             )),
             M2Area::Base => Some(M2Item::BasePhtml(
-                parts.next()?.to_string(),
-                parts.next()?.to_string(),
+                parts.next()?.into(),
+                parts.next()?.into(),
             )),
         }
     } else {
@@ -383,13 +382,13 @@ fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
 fn try_method_item_from_tag(tag: &XmlTag) -> Option<M2Item> {
     if tag.attributes.get("instance").is_some() && tag.attributes.get("method").is_some() {
         Some(M2Item::Method(
-            tag.attributes.get("instance")?.to_string(),
-            tag.attributes.get("method")?.to_string(),
+            tag.attributes.get("instance")?.into(),
+            tag.attributes.get("method")?.into(),
         ))
     } else if tag.attributes.get("class").is_some() && tag.attributes.get("method").is_some() {
         Some(M2Item::Method(
-            tag.attributes.get("class")?.to_string(),
-            tag.attributes.get("method")?.to_string(),
+            tag.attributes.get("class")?.into(),
+            tag.attributes.get("method")?.into(),
         ))
     } else {
         None
@@ -442,7 +441,7 @@ mod test {
     fn test_get_item_from_pos_class_in_tag_text() {
         let item = get_test_item_from_pos(r#"<?xml version="1.0"?><item>|A\B\C</item>"#, "/a/b/c");
 
-        assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())));
+        assert_eq!(item, Some(M2Item::Class("A\\B\\C".into())));
     }
 
     #[test]
@@ -454,8 +453,8 @@ mod test {
         assert_eq!(
             item,
             Some(M2Item::AdminPhtml(
-                "Some_Module".to_string(),
-                "path/to/file.phtml".to_string()
+                "Some_Module".into(),
+                "path/to/file.phtml".into()
             ))
         );
     }
@@ -469,8 +468,8 @@ mod test {
         assert_eq!(
             item,
             Some(M2Item::FrontPhtml(
-                "Some_Module".to_string(),
-                "path/to/file.phtml".to_string()
+                "Some_Module".into(),
+                "path/to/file.phtml".into()
             ))
         );
     }
@@ -483,7 +482,7 @@ mod test {
         );
         assert_eq!(
             item,
-            Some(M2Item::Method("A\\B\\C".to_string(), "metHod".to_string()))
+            Some(M2Item::Method("A\\B\\C".into(), "metHod".into()))
         );
     }
 
@@ -495,7 +494,7 @@ mod test {
         );
         assert_eq!(
             item,
-            Some(M2Item::Method("A\\B\\C".to_string(), "metHod".to_string()))
+            Some(M2Item::Method("A\\B\\C".into(), "metHod".into()))
         );
     }
 
@@ -507,7 +506,7 @@ mod test {
         );
         assert_eq!(
             item,
-            Some(M2Item::Method("A\\B\\C".to_string(), "metHod".to_string()))
+            Some(M2Item::Method("A\\B\\C".into(), "metHod".into()))
         );
     }
 
@@ -517,13 +516,13 @@ mod test {
             r#"<?xml version="1.0"?><service something="\|A\B\C" method="metHod">xx</service>"#,
             "/a/a/c",
         );
-        assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())));
+        assert_eq!(item, Some(M2Item::Class("A\\B\\C".into())));
     }
 
     #[test]
     fn test_get_item_from_pos_class_in_text_in_tag() {
         let item = get_test_item_from_pos(r#"<?xml version="1.0"?><some>|A\B\C</some>"#, "/a/a/c");
-        assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())));
+        assert_eq!(item, Some(M2Item::Class("A\\B\\C".into())));
     }
 
     #[test]
@@ -534,10 +533,7 @@ mod test {
         );
         assert_eq!(
             item,
-            Some(M2Item::Const(
-                "A\\B\\C".to_string(),
-                "CONST_ANT".to_string()
-            ))
+            Some(M2Item::Const("A\\B\\C".into(), "CONST_ANT".into()))
         );
     }
 
@@ -550,8 +546,8 @@ mod test {
         assert_eq!(
             item,
             Some(M2Item::AdminPhtml(
-                "Some_Module".to_string(),
-                "file.phtml".to_string()
+                "Some_Module".into(),
+                "file.phtml".into()
             ))
         );
     }
@@ -582,7 +578,7 @@ mod test {
             "#,
             "/a/a/c",
         );
-        assert_eq!(item, Some(M2Item::Class("Some\\Class\\Name".to_string())))
+        assert_eq!(item, Some(M2Item::Class("Some\\Class\\Name".into())))
     }
 
     #[test]
@@ -593,7 +589,7 @@ mod test {
             "#,
             "/a/a/c",
         );
-        assert_eq!(item, Some(M2Item::Class("A\\B\\C".to_string())))
+        assert_eq!(item, Some(M2Item::Class("A\\B\\C".into())))
     }
 
     #[test]

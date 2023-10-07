@@ -145,15 +145,12 @@ fn completion_for_classes_full(
 
     let module_class = module_name.replace('_', "\\");
     let module_path = index.lock().get_module_path(&module_name)?;
-    let candidates = glob(&module_path.append(&["**", "*.php"]).to_path_string())
+    let candidates = glob(module_path.append(&["**", "*.php"]).to_path_str())
         .expect("Failed to read glob pattern");
     let mut classes = vec![];
     for p in candidates {
         let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
-        let rel_path = path
-            .relative_to(&module_path)
-            .string_components()
-            .join("\\");
+        let rel_path = path.relative_to(&module_path).str_components().join("\\");
         let class_suffix = rel_path.trim_end_matches(".php");
         let class = format!("{}\\{}", &module_class, class_suffix);
 
@@ -187,13 +184,13 @@ fn completion_for_template(
             Some(path) => {
                 let mut files = vec![];
                 for area_string in area.path_candidates() {
-                    let view_path = path.append(&["view", &area_string, "templates"]);
+                    let view_path = path.append(&["view", area_string, "templates"]);
                     let glob_path = view_path.append(&["**", "*.phtml"]);
-                    files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                    files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
                         let path = file
                             .unwrap_or_default()
                             .relative_to(&view_path)
-                            .string_components()
+                            .str_components()
                             .join("/");
                         String::from(module_name) + "::" + &path
                     }));
@@ -217,13 +214,13 @@ fn completion_for_component(
         let mut files = vec![];
         if let Some(path) = index.lock().get_module_path(module_name) {
             for area in area.path_candidates() {
-                let view_path = path.append(&["view", &area, "web"]);
+                let view_path = path.append(&["view", area, "web"]);
                 let glob_path = view_path.append(&["**", "*.js"]);
-                files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+                files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
                     let path = file
                         .unwrap_or_default()
                         .relative_to(&view_path)
-                        .string_components()
+                        .str_components()
                         .join("/");
                     let path = path.trim_end_matches(".js");
                     String::from(module_name) + "/" + path
@@ -234,11 +231,11 @@ fn completion_for_component(
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);
-            files.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+            files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
                 let path = file
                     .unwrap_or_default()
                     .relative_to(&view_path)
-                    .string_components()
+                    .str_components()
                     .join("/");
                 path.trim_end_matches(".js").to_string()
             }));
@@ -260,11 +257,11 @@ fn completion_for_component(
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);
-            modules.extend(glob::glob(&glob_path.to_path_string()).ok()?.map(|file| {
+            modules.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
                 let path = file
                     .unwrap_or_default()
                     .relative_to(&view_path)
-                    .string_components()
+                    .str_components()
                     .join("/");
                 path.trim_end_matches(".js").to_string()
             }));
