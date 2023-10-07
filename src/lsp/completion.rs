@@ -25,22 +25,20 @@ pub fn get_completion_from_params(
         .uri
         .to_path_buf();
     let pos = params.text_document_position.position;
-    let content = state.lock().get_file(&path)?.clone();
 
     match path.get_ext().as_str() {
-        "xml" => xml_completion_handler(state, &content, &path, pos),
-        "js" => js_completion_handler(state, &content, &path, pos),
+        "xml" => xml_completion_handler(state, &path, pos),
+        "js" => js_completion_handler(state, &path, pos),
         _ => None,
     }
 }
 
 fn js_completion_handler(
     state: &ArcState,
-    content: &str,
     path: &PathBuf,
     pos: Position,
 ) -> Option<Vec<CompletionItem>> {
-    let at_position = js::get_completion_item(content, pos)?;
+    let at_position = js::get_completion_item(state.lock().get_file(path)?, pos)?;
 
     match at_position.kind {
         JsCompletionType::Definition => completion_for_component(
@@ -54,11 +52,10 @@ fn js_completion_handler(
 
 fn xml_completion_handler(
     state: &ArcState,
-    content: &str,
     path: &PathBuf,
     pos: Position,
 ) -> Option<Vec<CompletionItem>> {
-    let at_position = xml::get_current_position_path(content, pos)?;
+    let at_position = xml::get_current_position_path(state.lock().get_file(path)?, pos)?;
     match at_position {
         x if x.match_path("[@template]") => {
             completion_for_template(state, &x.text, x.range, &path.get_area())
