@@ -84,11 +84,15 @@ pub fn update_index(state: &ArcState, path: &PathBuf) {
     process_glob(
         state,
         &path.append(&["vendor", "*", "*", "registration.php"]),
-    );
+    ); // vendor modules / themes
     process_glob(
         state,
         &path.append(&["app", "code", "*", "*", "registration.php"]),
-    );
+    ); // local modules
+    process_glob(
+        state,
+        &path.append(&["app", "design", "*", "*", "*", "registration.php"]),
+    ); // local themes
     process_glob(
         state,
         &path.append(&[
@@ -101,7 +105,7 @@ pub fn update_index(state: &ArcState, path: &PathBuf) {
             "Setup",
             "registration.php",
         ]),
-    );
+    ); // magento2-base setup module
 }
 
 fn process_glob(state: &ArcState, glob_path: &PathBuf) {
