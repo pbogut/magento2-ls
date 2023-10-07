@@ -6,10 +6,10 @@ use std::{
 use tree_sitter::{Node, QueryCursor};
 
 use crate::{
-    indexer::Indexer,
     js,
     m2::{M2Area, M2Item, M2Path},
     queries,
+    state::State,
     ts::{get_node_str, get_node_text_before_pos, node_at_position, node_last_child},
 };
 
@@ -229,13 +229,13 @@ fn node_to_path(node: Node, content: &str) -> Option<String> {
     Some(result)
 }
 
-pub fn get_item_from_position(index: &Indexer, path: &PathBuf, pos: Position) -> Option<M2Item> {
-    let content = index.get_file(path)?;
-    get_item_from_pos(index, content, path, pos)
+pub fn get_item_from_position(state: &State, path: &PathBuf, pos: Position) -> Option<M2Item> {
+    let content = state.get_file(path)?;
+    get_item_from_pos(state, content, path, pos)
 }
 
 fn get_item_from_pos(
-    index: &Indexer,
+    state: &State,
     content: &str,
     path: &PathBuf,
     pos: Position,
@@ -260,8 +260,8 @@ fn get_item_from_pos(
                 "init_parameter" => try_const_item_from_str(text),
                 "string" => {
                     if tag.attributes.get("name").is_some_and(|s| s == "component") {
-                        let text = js::resolve_component_text(index, text, &path.get_area())?;
-                        js::text_to_component(index, text, path)
+                        let text = js::resolve_component_text(state, text, &path.get_area())?;
+                        js::text_to_component(state, text, path)
                     } else {
                         try_any_item_from_str(text, &path.get_area())
                     }
@@ -428,8 +428,8 @@ mod test {
         let win_path = format!("c:{}", path.replace('/', "\\"));
         let pos = get_position_from_test_xml(xml);
         let uri = PathBuf::from(if cfg!(windows) { &win_path } else { path });
-        let index = Indexer::new();
-        get_item_from_pos(&index, &xml.replace('|', ""), &uri, pos)
+        let state = State::new();
+        get_item_from_pos(&state, &xml.replace('|', ""), &uri, pos)
     }
 
     fn get_test_xml_tag_at_pos(xml: &str) -> Option<XmlTag> {
