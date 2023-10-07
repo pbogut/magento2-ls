@@ -35,12 +35,12 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         completion_provider: Some(CompletionOptions {
             resolve_provider: Some(false),
             trigger_characters: Some(vec![
-                ">".to_string(),
-                "\"".to_string(),
-                "'".to_string(),
-                ":".to_string(),
-                "\\".to_string(),
-                "/".to_string(),
+                String::from(">"),
+                String::from("\""),
+                String::from("'"),
+                String::from(":"),
+                String::from("\\"),
+                String::from("/"),
             ]),
             work_done_progress_options: WorkDoneProgressOptions {
                 work_done_progress: None,

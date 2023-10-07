@@ -54,7 +54,7 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
 }
 
 fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
-    let modules = glob(&glob_path.to_path_string())
+    let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
 
@@ -113,7 +113,7 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
     for m in matches {
         if node_at_position(m.captures[1].node, pos) {
             let text = get_node_text(m.captures[1].node, content);
-            let text = resolve_component_text(index, &text, &path.to_path_buf().get_area())?;
+            let text = resolve_component_text(index, text, &path.to_path_buf().get_area())?;
             return text_to_component(index, text, path);
         }
     }
@@ -121,25 +121,27 @@ fn get_item_from_pos(index: &Indexer, content: &str, path: &Path, pos: Position)
     None
 }
 
-pub fn resolve_component_text(index: &Indexer, text: &str, area: &M2Area) -> Option<String> {
+pub fn resolve_component_text<'a>(
+    index: &'a Indexer,
+    text: &'a str,
+    area: &M2Area,
+) -> Option<&'a str> {
     index.get_component_map(text, area).map_or_else(
         || {
-            area.lower_area().map_or_else(
-                || Some(text.to_string()),
-                |a| resolve_component_text(index, text, &a),
-            )
+            area.lower_area()
+                .map_or_else(|| Some(text), |a| resolve_component_text(index, text, &a))
         },
         |t| resolve_component_text(index, t, area),
     )
 }
 
-pub fn text_to_component(index: &Indexer, text: String, path: &Path) -> Option<M2Item> {
+pub fn text_to_component(index: &Indexer, text: &str, path: &Path) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
     if begining.chars().next().unwrap_or('a') == '.' {
         let mut path = path.to_path_buf();
         path.pop();
-        Some(M2Item::RelComponent(text, path))
+        Some(M2Item::RelComponent(text.into(), path))
     } else if text.split('/').count() > 1
         && begining.matches('_').count() == 1
         && begining.chars().next().unwrap_or('a').is_uppercase()
@@ -149,11 +151,11 @@ pub fn text_to_component(index: &Indexer, text: String, path: &Path) -> Option<M
         let mod_path = index.get_module_path(&mod_name)?;
         Some(M2Item::ModComponent(
             mod_name,
-            parts.next()?.to_string(),
+            parts.next()?.into(),
             mod_path,
         ))
     } else {
-        Some(M2Item::Component(text))
+        Some(M2Item::Component(text.into()))
     }
 }
 
@@ -170,8 +172,8 @@ fn update_index_from_config(index: &ArcIndexer, content: &str, area: &M2Area) {
         {
             let mut index = index.lock();
             match get_kind(m.captures[1].node, content) {
-                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(&key, val, area),
-                Some(JSTypes::Mixins) => index.add_component_mixin(&key, val),
+                Some(JSTypes::Map | JSTypes::Paths) => index.add_component_map(key, val, area),
+                Some(JSTypes::Mixins) => index.add_component_mixin(key, val),
                 None => continue,
             };
         }
@@ -179,7 +181,7 @@ fn update_index_from_config(index: &ArcIndexer, content: &str, area: &M2Area) {
 }
 
 fn get_kind(node: Node, content: &str) -> Option<JSTypes> {
-    match get_node_text(node, content).as_str() {
+    match get_node_text(node, content) {
         "map" => Some(JSTypes::Map),
         "paths" => Some(JSTypes::Paths),
         "mixins" => Some(JSTypes::Mixins),
@@ -187,21 +189,17 @@ fn get_kind(node: Node, content: &str) -> Option<JSTypes> {
     }
 }
 
-fn get_node_text(node: Node, content: &str) -> String {
+fn get_node_text<'a>(node: Node, content: &'a str) -> &'a str {
     let result = node
         .utf8_text(content.as_bytes())
         .unwrap_or("")
-        .trim_matches('\\')
-        .to_string();
+        .trim_matches('\\');
 
     if node.kind() == "string" {
-        match get_node_text(node.child(0).unwrap_or(node), content)
+        get_node_text(node.child(0).unwrap_or(node), content)
             .chars()
             .next()
-        {
-            Some(trim) => result.trim_matches(trim).to_string(),
-            None => result,
-        }
+            .map_or(result, |trim| result.trim_matches(trim))
     } else {
         result
     }
@@ -281,8 +279,8 @@ mod test {
         assert_eq!(
             item,
             Some(M2Item::ModComponent(
-                "Some_Module".to_string(),
-                "some/view".to_string(),
+                "Some_Module".into(),
+                "some/view".into(),
                 PathBuf::from("/a/b/c/Some_Module")
             ))
         );
@@ -298,7 +296,7 @@ mod test {
             "#,
             "/a/b/c",
         );
-        assert_eq!(item, Some(M2Item::Component("jquery".to_string())));
+        assert_eq!(item, Some(M2Item::Component("jquery".into())));
     }
 
     #[test]
@@ -313,7 +311,7 @@ mod test {
         );
         assert_eq!(
             item,
-            Some(M2Item::Component("jquery-ui-modules/widget".to_string()))
+            Some(M2Item::Component("jquery-ui-modules/widget".into()))
         );
     }
 

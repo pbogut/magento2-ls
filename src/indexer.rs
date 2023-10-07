@@ -92,21 +92,30 @@ impl Indexer {
     }
 
     pub fn add_module(&mut self, module: &str) -> &mut Self {
-        self.magento_modules.push(module.to_string());
+        self.magento_modules.push(module.into());
         self
     }
 
-    pub fn add_module_path(&mut self, module: &str, path: PathBuf) -> &mut Self {
-        self.magento_module_paths.insert(module.to_string(), path);
+    pub fn add_module_path<S>(&mut self, module: S, path: PathBuf) -> &mut Self
+    where
+        S: Into<String>,
+    {
+        self.magento_module_paths.insert(module.into(), path);
         self
     }
 
-    pub fn add_admin_theme_path(&mut self, name: &str, path: PathBuf) {
-        self.magento_admin_themes.insert(name.to_string(), path);
+    pub fn add_admin_theme_path<S>(&mut self, name: S, path: PathBuf)
+    where
+        S: Into<String>,
+    {
+        self.magento_admin_themes.insert(name.into(), path);
     }
 
-    pub fn add_front_theme_path(&mut self, name: &str, path: PathBuf) {
-        self.magento_front_themes.insert(name.to_string(), path);
+    pub fn add_front_theme_path<S>(&mut self, name: S, path: PathBuf)
+    where
+        S: Into<String>,
+    {
+        self.magento_front_themes.insert(name.into(), path);
     }
 
     pub fn get_component_map(&self, name: &str, area: &M2Area) -> Option<&String> {
@@ -120,18 +129,18 @@ impl Indexer {
             .collect()
     }
 
-    pub fn add_component_map<S>(&mut self, name: &str, val: S, area: &M2Area) -> Option<String>
+    pub fn add_component_map<S>(&mut self, name: S, val: S, area: &M2Area) -> Option<String>
     where
         S: Into<String>,
     {
-        self.js_maps[area.id()].insert(name.to_string(), val.into())
+        self.js_maps[area.id()].insert(name.into(), val.into())
     }
 
-    pub fn add_component_mixin<S>(&mut self, name: &str, val: S) -> Option<String>
+    pub fn add_component_mixin<S>(&mut self, name: S, val: S) -> Option<String>
     where
         S: Into<String>,
     {
-        self.js_mixins.insert(name.to_string(), val.into())
+        self.js_mixins.insert(name.into(), val.into())
     }
 
     pub fn list_front_themes_paths(&self) -> Vec<&PathBuf> {

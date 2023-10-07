@@ -25,15 +25,11 @@ pub enum M2Area {
 }
 
 impl M2Area {
-    pub fn path_candidates(&self) -> Vec<String> {
+    pub fn path_candidates(&self) -> Vec<&str> {
         match self {
-            Self::Frontend => vec!["frontend".to_string(), "base".to_string()],
-            Self::Adminhtml => vec!["adminhtml".to_string(), "base".to_string()],
-            Self::Base => vec![
-                "frontend".to_string(),
-                "adminhtml".to_string(),
-                "base".to_string(),
-            ],
+            Self::Frontend => vec!["frontend", "base"],
+            Self::Adminhtml => vec!["adminhtml", "base"],
+            Self::Base => vec!["frontend", "adminhtml", "base"],
         }
     }
 
@@ -43,14 +39,12 @@ impl M2Area {
             Self::Base => None,
         }
     }
-}
 
-impl ToString for M2Area {
-    fn to_string(&self) -> String {
+    pub const fn to_str(&self) -> &str {
         match self {
-            Self::Frontend => "frontend".to_string(),
-            Self::Adminhtml => "adminhtml".to_string(),
-            Self::Base => "base".to_string(),
+            Self::Frontend => "frontend",
+            Self::Adminhtml => "adminhtml",
+            Self::Base => "base",
         }
     }
 }
@@ -63,7 +57,7 @@ pub trait M2Uri {
 #[allow(clippy::module_name_repetitions)]
 pub trait M2Path {
     fn has_components(&self, parts: &[&str]) -> bool;
-    fn string_components(&self) -> Vec<String>;
+    fn str_components(&self) -> Vec<&str>;
     fn relative_to<P: AsRef<Path>>(&self, base: P) -> PathBuf;
     fn append(&self, parts: &[&str]) -> Self;
     fn append_ext(&self, ext: &str) -> Self;
@@ -71,7 +65,7 @@ pub trait M2Path {
     fn is_frontend(&self) -> bool;
     fn is_test(&self) -> bool;
     fn get_area(&self) -> M2Area;
-    fn to_path_string(&self) -> String;
+    fn to_path_str(&self) -> &str;
 }
 
 impl M2Path for PathBuf {
@@ -103,10 +97,9 @@ impl M2Path for PathBuf {
         self.strip_prefix(base).unwrap_or(self).to_path_buf()
     }
 
-    fn to_path_string(&self) -> String {
+    fn to_path_str(&self) -> &str {
         self.to_str()
             .expect("PathBuf should convert to path String")
-            .to_string()
     }
 
     fn get_area(&self) -> M2Area {
@@ -125,9 +118,9 @@ impl M2Path for PathBuf {
         }
     }
 
-    fn string_components(&self) -> Vec<String> {
+    fn str_components(&self) -> Vec<&str> {
         self.components()
-            .map(|c| c.as_os_str().to_str().unwrap_or_default().to_string())
+            .map(|c| c.as_os_str().to_str().unwrap_or_default())
             .collect()
     }
 

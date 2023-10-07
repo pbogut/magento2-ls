@@ -27,7 +27,7 @@ pub fn get_location_from_params(
 
             for area in [M2Area::Frontend, M2Area::Adminhtml, M2Area::Base] {
                 let comp_path = mod_path
-                    .append(&["view", &area.to_string(), "web", &file_path])
+                    .append(&["view", area.to_str(), "web", &file_path])
                     .append_ext("js");
                 if let Some(location) = path_to_location(&comp_path) {
                     result.push(location);
@@ -114,7 +114,7 @@ fn add_phtml_in_mod_location(
     let mod_path = index.lock().get_module_path(mod_name);
     if let Some(path) = mod_path {
         for area in area.path_candidates() {
-            let templ_path = path.append(&["view", &area, "templates", template]);
+            let templ_path = path.append(&["view", area, "templates", template]);
             if let Some(location) = path_to_location(&templ_path) {
                 result.push(location);
             }

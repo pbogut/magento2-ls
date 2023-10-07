@@ -9,14 +9,8 @@ use crate::{
     indexer::ArcIndexer,
     m2::M2Path,
     queries,
-    ts::{get_node_text, get_range_from_node},
+    ts::{self, get_range_from_node},
 };
-
-#[derive(Debug, Clone)]
-pub struct Callable {
-    pub class: String,
-    pub method: Option<String>,
-}
 
 #[derive(Debug, Clone)]
 pub struct PHPClass {
@@ -50,9 +44,9 @@ enum M2Module {
 fn register_param_to_module(param: &str) -> Option<M2Module> {
     if param.matches('/').count() == 2 {
         if param.starts_with("frontend") {
-            Some(M2Module::FrontTheme(param.to_string()))
+            Some(M2Module::FrontTheme(param.into()))
         } else {
-            Some(M2Module::AdminTheme(param.to_string()))
+            Some(M2Module::AdminTheme(param.into()))
         }
     } else if param.matches('/').count() == 1 {
         let mut parts = param.splitn(2, '/');
@@ -111,7 +105,7 @@ pub fn update_index(index: &ArcIndexer, path: &PathBuf) {
 }
 
 fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
-    let modules = glob(&glob_path.to_path_string())
+    let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
 
@@ -128,8 +122,9 @@ fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
         let mut cursor = QueryCursor::new();
         let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
         for m in matches {
-            let mod_name = get_node_text(m.captures[1].node, &content);
-            let mod_name = mod_name.trim_matches('"').trim_matches('\'');
+            let mod_name = ts::get_node_str(m.captures[1].node, &content)
+                .trim_matches('"')
+                .trim_matches('\'');
 
             let mut parent = file_path.clone();
             parent.pop();
@@ -138,19 +133,16 @@ fn process_glob(index: &ArcIndexer, glob_path: &PathBuf) {
 
             match register_param_to_module(mod_name) {
                 Some(M2Module::Module(m)) => {
-                    index
-                        .lock()
-                        .add_module(mod_name)
-                        .add_module_path(&m, parent);
+                    index.lock().add_module(mod_name).add_module_path(m, parent);
                 }
                 Some(M2Module::Library(l)) => {
-                    index.lock().add_module_path(&l, parent);
+                    index.lock().add_module_path(l, parent);
                 }
                 Some(M2Module::FrontTheme(t)) => {
-                    index.lock().add_front_theme_path(&t, parent);
+                    index.lock().add_front_theme_path(t, parent);
                 }
                 Some(M2Module::AdminTheme(t)) => {
-                    index.lock().add_admin_theme_path(&t, parent);
+                    index.lock().add_admin_theme_path(t, parent);
                 }
                 _ => (),
             }
@@ -181,12 +173,12 @@ pub fn parse_php_file(file_path: &PathBuf) -> Option<PHPClass> {
         }
         if m.pattern_index == 3 {
             let method_node = m.captures[1].node;
-            let method_name = method_node.utf8_text(content.as_bytes()).unwrap_or("");
+            let method_name = ts::get_node_str(method_node, &content);
             if !method_name.is_empty() {
                 methods.insert(
-                    method_name.to_string(),
+                    method_name.into(),
                     PHPMethod {
-                        name: method_name.to_string(),
+                        name: method_name.into(),
                         range: get_range_from_node(method_node),
                     },
                 );
@@ -197,9 +189,9 @@ pub fn parse_php_file(file_path: &PathBuf) -> Option<PHPClass> {
             let const_name = const_node.utf8_text(content.as_bytes()).unwrap_or("");
             if !const_name.is_empty() {
                 constants.insert(
-                    const_name.to_string(),
+                    const_name.into(),
                     PHPConst {
-                        name: const_name.to_string(),
+                        name: const_name.into(),
                         range: get_range_from_node(const_node),
                     },
                 );

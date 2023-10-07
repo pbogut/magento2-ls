@@ -18,14 +18,13 @@ pub fn get_node_text_before_pos(node: Node, content: &str, pos: Position) -> Str
     let text = node
         .utf8_text(content.as_bytes())
         .unwrap_or("")
-        .trim_matches('\\')
-        .to_string();
+        .trim_matches('\\');
 
     let node_start_pos = node.start_position();
     let node_end_pos = node.end_position();
 
     let text = if node_end_pos.row == node_start_pos.row {
-        text
+        text.to_string()
     } else {
         let take_lines = pos.line as usize - node_start_pos.row;
         text.split('\n')
@@ -59,11 +58,10 @@ pub fn get_node_text_before_pos(node: Node, content: &str, pos: Position) -> Str
     }
 }
 
-pub fn get_node_text(node: Node, content: &str) -> String {
+pub fn get_node_str<'a>(node: Node, content: &'a str) -> &'a str {
     node.utf8_text(content.as_bytes())
         .unwrap_or("")
         .trim_matches('\\')
-        .to_string()
 }
 
 pub fn node_at_position(node: Node, pos: Position) -> bool {
