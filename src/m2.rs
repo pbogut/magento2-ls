@@ -39,14 +39,6 @@ impl M2Area {
             Self::Base => None,
         }
     }
-
-    pub const fn to_str(&self) -> &str {
-        match self {
-            Self::Frontend => "frontend",
-            Self::Adminhtml => "adminhtml",
-            Self::Base => "base",
-        }
-    }
 }
 
 #[allow(clippy::module_name_repetitions)]

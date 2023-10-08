@@ -171,7 +171,7 @@ fn update_index_from_config(state: &ArcState, content: &str, area: &M2Area) {
         let val = get_node_text(m.captures[3].node, content);
         match get_kind(m.captures[1].node, content) {
             Some(JSTypes::Map | JSTypes::Paths) => state.lock().add_component_map(key, val, area),
-            Some(JSTypes::Mixins) => state.lock().add_component_mixin(key, val),
+            Some(JSTypes::Mixins) => state.lock().add_component_mixin(key, val, area),
             None => continue,
         };
     }
@@ -256,8 +256,12 @@ mod test {
             &M2Area::Base,
         );
         result.add_component_map("otherComp", "Some_Other/js/comp", &M2Area::Base);
-        result.add_component_mixin("Mage_Module/js/smth", "My_Module/js/mixin/smth");
-        result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe");
+        result.add_component_mixin(
+            "Mage_Module/js/smth",
+            "My_Module/js/mixin/smth",
+            &M2Area::Base,
+        );
+        result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe", &M2Area::Base);
 
         assert_eq!(arc_state.lock().to_owned(), result);
     }

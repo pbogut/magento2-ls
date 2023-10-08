@@ -37,7 +37,7 @@ pub struct State {
     magento_front_themes: HashMap<String, PathBuf>,
     magento_admin_themes: HashMap<String, PathBuf>,
     js_maps: [HashMap<String, String>; 3],
-    js_mixins: HashMap<String, String>,
+    js_mixins: [HashMap<String, Vec<M2Item>>; 3],
     workspaces: Vec<PathBuf>,
 }
 
@@ -53,7 +53,7 @@ impl State {
             magento_front_themes: HashMap::new(),
             magento_admin_themes: HashMap::new(),
             js_maps: [HashMap::new(), HashMap::new(), HashMap::new()],
-            js_mixins: HashMap::new(),
+            js_mixins: [HashMap::new(), HashMap::new(), HashMap::new()],
             workspaces: vec![],
         }
     }
@@ -129,18 +129,39 @@ impl State {
             .collect()
     }
 
-    pub fn add_component_map<S>(&mut self, name: S, val: S, area: &M2Area) -> Option<String>
+    pub fn add_component_map<S>(&mut self, name: S, val: S, area: &M2Area)
     where
         S: Into<String>,
     {
-        self.js_maps[area.id()].insert(name.into(), val.into())
+        self.js_maps[area.id()].insert(name.into(), val.into());
     }
 
-    pub fn add_component_mixin<S>(&mut self, name: S, val: S) -> Option<String>
+    pub fn add_component_mixin<S>(&mut self, name: S, val: S, area: &M2Area)
     where
         S: Into<String>,
     {
-        self.js_mixins.insert(name.into(), val.into())
+        let name = name.into();
+        let val = val.into();
+        dbg!(&name);
+        dbg!(&val);
+
+        if let Some(component) = js::text_to_component(self, &val, Path::new("")) {
+            if let Some(vec) = self.js_mixins[area.id()].get_mut(&name) {
+                vec.push(dbg!(component));
+            } else {
+                self.js_mixins[area.id()].insert(name, vec![dbg!(component)]);
+            }
+        }
+    }
+
+    pub fn get_component_mixins_for_area<S>(&self, name: S, area: &M2Area) -> Vec<M2Item>
+    where
+        S: Into<String>,
+    {
+        self.js_mixins[area.id()]
+            .get(&name.into())
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn list_front_themes_paths(&self) -> Vec<&PathBuf> {

@@ -24,7 +24,7 @@ pub fn get_location_from_params(
     let item = state.lock().get_item_from_position(&path, pos)?;
     Some(match item {
         M2Item::ModComponent(mod_name, file_path, mod_path) => {
-            component::mod_location(mod_name, &file_path, mod_path, &path)
+            component::mod_location(state, mod_name, &file_path, mod_path, &path)
         }
         M2Item::RelComponent(comp, path) => component::find_rel(comp, &path)?,
         M2Item::Component(comp) => component::find_plain(state, &comp),
