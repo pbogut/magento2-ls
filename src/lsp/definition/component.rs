@@ -27,19 +27,25 @@ pub fn find_rel(comp: String, path: &Path) -> Option<Vec<Location>> {
 }
 
 pub fn mod_location(
+    state: &ArcState,
     mod_name: String,
     file_path: &str,
     mod_path: PathBuf,
     path: &PathBuf,
 ) -> Vec<Location> {
     let mut result = vec![];
-    let components = vec![M2Item::ModComponent(
+    let mut components = vec![M2Item::ModComponent(
         mod_name.clone(),
         file_path.to_string(),
         mod_path,
     )];
 
     let area = path.get_area();
+    components.extend(
+        state
+            .lock()
+            .get_component_mixins_for_area(mod_name + "/" + file_path, &area),
+    );
 
     for component in components {
         if let M2Item::ModComponent(_, file_path, mod_path) = component {
