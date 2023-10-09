@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use convert_case::{Case, Casing};
 use glob::glob;
@@ -8,7 +11,7 @@ use tree_sitter::{Node, QueryCursor};
 use crate::{
     m2::M2Path,
     queries,
-    state::ArcState,
+    state::{ArcState, State},
     ts::{self, get_range_from_node},
 };
 
@@ -108,12 +111,51 @@ pub fn update_index(state: &ArcState, path: &PathBuf) {
     ); // magento2-base setup module
 }
 
+pub fn maybe_index_file(state: &mut State, content: &str, file_path: &PathBuf) {
+    if file_path.to_path_str().ends_with("registration.php") {
+        update_index_from_registration(state, content, file_path);
+    }
+}
+
+fn update_index_from_registration(state: &mut State, content: &str, file_path: &Path) {
+    state.set_source_file(file_path);
+    let query = queries::php_registration();
+    let tree = tree_sitter_parsers::parse(content, "php");
+    let mut cursor = QueryCursor::new();
+    let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
+    for m in matches {
+        let mod_name = ts::get_node_str(m.captures[1].node, content)
+            .trim_matches('"')
+            .trim_matches('\'');
+
+        let mut parent = file_path.to_path_buf();
+        parent.pop();
+
+        state.add_module_path(mod_name, parent.clone());
+
+        match register_param_to_module(mod_name) {
+            Some(M2Module::Module(m)) => {
+                state.add_module(mod_name).add_module_path(m, parent);
+            }
+            Some(M2Module::Library(l)) => {
+                state.add_module_path(l, parent);
+            }
+            Some(M2Module::FrontTheme(t)) => {
+                state.add_front_theme_path(t, parent);
+            }
+            Some(M2Module::AdminTheme(t)) => {
+                state.add_admin_theme_path(t, parent);
+            }
+            _ => (),
+        }
+    }
+}
+
 fn process_glob(state: &ArcState, glob_path: &PathBuf) {
     let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
 
-    let query = queries::php_registration();
     for file_path in modules {
         if file_path.is_test() {
             return;
@@ -122,35 +164,7 @@ fn process_glob(state: &ArcState, glob_path: &PathBuf) {
         let content =
             std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
 
-        let tree = tree_sitter_parsers::parse(&content, "php");
-        let mut cursor = QueryCursor::new();
-        let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
-        for m in matches {
-            let mod_name = ts::get_node_str(m.captures[1].node, &content)
-                .trim_matches('"')
-                .trim_matches('\'');
-
-            let mut parent = file_path.clone();
-            parent.pop();
-
-            state.lock().add_module_path(mod_name, parent.clone());
-
-            match register_param_to_module(mod_name) {
-                Some(M2Module::Module(m)) => {
-                    state.lock().add_module(mod_name).add_module_path(m, parent);
-                }
-                Some(M2Module::Library(l)) => {
-                    state.lock().add_module_path(l, parent);
-                }
-                Some(M2Module::FrontTheme(t)) => {
-                    state.lock().add_front_theme_path(t, parent);
-                }
-                Some(M2Module::AdminTheme(t)) => {
-                    state.lock().add_admin_theme_path(t, parent);
-                }
-                _ => (),
-            }
-        }
+        update_index_from_registration(&mut state.lock(), &content, &file_path);
     }
 }
 

@@ -30,12 +30,49 @@ impl HashMapId for M2Area {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum Trackee {
+    Module(String),
+    ModulePath(String),
+    JsMap(M2Area, String),
+    JsMixin(M2Area, String),
+    Themes(M2Area, String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TrackingList(HashMap<PathBuf, Vec<Trackee>>);
+
+impl TrackingList {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn track(&mut self, source_path: &Path, trackee: Trackee) {
+        self.0
+            .entry(source_path.into())
+            .or_insert_with(Vec::new)
+            .push(trackee);
+    }
+
+    pub fn maybe_track(&mut self, source_path: Option<&PathBuf>, trackee: Trackee) {
+        if let Some(source_path) = source_path {
+            self.track(source_path, trackee);
+        }
+    }
+
+    pub fn untrack(&mut self, source_path: &Path) -> Option<Vec<Trackee>> {
+        self.0.remove(source_path)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct State {
+    source_file: Option<PathBuf>,
+    track_entities: TrackingList,
     buffers: HashMap<PathBuf, String>,
-    magento_modules: Vec<String>,
-    magento_module_paths: HashMap<String, PathBuf>,
-    magento_front_themes: HashMap<String, PathBuf>,
-    magento_admin_themes: HashMap<String, PathBuf>,
+    modules: Vec<String>,
+    module_paths: HashMap<String, PathBuf>,
+    front_themes: HashMap<String, PathBuf>,
+    admin_themes: HashMap<String, PathBuf>,
     js_maps: [HashMap<String, String>; 3],
     js_mixins: [HashMap<String, Vec<M2Item>>; 3],
     workspaces: Vec<PathBuf>,
@@ -47,14 +84,53 @@ pub type ArcState = Arc<Mutex<State>>;
 impl State {
     pub fn new() -> Self {
         Self {
+            source_file: None,
+            track_entities: TrackingList::new(),
             buffers: HashMap::new(),
-            magento_modules: vec![],
-            magento_module_paths: HashMap::new(),
-            magento_front_themes: HashMap::new(),
-            magento_admin_themes: HashMap::new(),
+            modules: vec![],
+            module_paths: HashMap::new(),
+            front_themes: HashMap::new(),
+            admin_themes: HashMap::new(),
             js_maps: [HashMap::new(), HashMap::new(), HashMap::new()],
             js_mixins: [HashMap::new(), HashMap::new(), HashMap::new()],
             workspaces: vec![],
+        }
+    }
+
+    pub fn set_source_file(&mut self, path: &Path) {
+        self.source_file = Some(path.to_owned());
+    }
+
+    pub fn clear_from_source(&mut self, path: &Path) {
+        if let Some(list) = self.track_entities.untrack(path) {
+            for trackee in list {
+                match trackee {
+                    Trackee::JsMap(area, name) => {
+                        self.js_maps[area.id()].remove(&name);
+                    }
+                    Trackee::JsMixin(area, name) => {
+                        self.js_mixins[area.id()].remove(&name);
+                    }
+                    Trackee::Module(module) => {
+                        self.modules.retain(|m| m != &module);
+                    }
+                    Trackee::ModulePath(module) => {
+                        self.module_paths.remove(&module);
+                    }
+                    Trackee::Themes(area, module) => match area {
+                        M2Area::Frontend => {
+                            self.front_themes.remove(&module);
+                        }
+                        M2Area::Adminhtml => {
+                            self.admin_themes.remove(&module);
+                        }
+                        M2Area::Base => {
+                            self.front_themes.remove(&module);
+                            self.admin_themes.remove(&module);
+                        }
+                    },
+                }
+            }
         }
     }
 
@@ -62,7 +138,12 @@ impl State {
     where
         S: Into<String>,
     {
-        self.buffers.insert(path.to_owned(), content.into());
+        let content = content.into();
+        self.clear_from_source(path);
+        js::maybe_index_file(self, &content, &path.to_owned());
+        php::maybe_index_file(self, &content, &path.to_owned());
+
+        self.buffers.insert(path.to_owned(), content);
     }
 
     pub fn get_file(&self, path: &PathBuf) -> Option<&String> {
@@ -74,7 +155,7 @@ impl State {
     }
 
     pub fn get_modules(&self) -> Vec<String> {
-        let mut modules = self.magento_modules.clone();
+        let mut modules = self.modules.clone();
         modules.sort_unstable();
         modules.dedup();
         modules
@@ -88,11 +169,14 @@ impl State {
     }
 
     pub fn get_module_path(&self, module: &str) -> Option<PathBuf> {
-        self.magento_module_paths.get(module).cloned()
+        self.module_paths.get(module).cloned()
     }
 
     pub fn add_module(&mut self, module: &str) -> &mut Self {
-        self.magento_modules.push(module.into());
+        self.track_entities
+            .maybe_track(self.source_file.as_ref(), Trackee::Module(module.into()));
+
+        self.modules.push(module.into());
         self
     }
 
@@ -100,7 +184,13 @@ impl State {
     where
         S: Into<String>,
     {
-        self.magento_module_paths.insert(module.into(), path);
+        let module = module.into();
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::ModulePath(module.clone()),
+        );
+
+        self.module_paths.insert(module, path);
         self
     }
 
@@ -108,14 +198,26 @@ impl State {
     where
         S: Into<String>,
     {
-        self.magento_admin_themes.insert(name.into(), path);
+        let name = name.into();
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::Themes(M2Area::Adminhtml, name.clone()),
+        );
+
+        self.admin_themes.insert(name, path);
     }
 
     pub fn add_front_theme_path<S>(&mut self, name: S, path: PathBuf)
     where
         S: Into<String>,
     {
-        self.magento_front_themes.insert(name.into(), path);
+        let name = name.into();
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::Themes(M2Area::Frontend, name.clone()),
+        );
+
+        self.front_themes.insert(name, path);
     }
 
     pub fn get_component_map(&self, name: &str, area: &M2Area) -> Option<&String> {
@@ -133,7 +235,13 @@ impl State {
     where
         S: Into<String>,
     {
-        self.js_maps[area.id()].insert(name.into(), val.into());
+        let name = name.into();
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::JsMap(area.clone(), name.clone()),
+        );
+
+        self.js_maps[area.id()].insert(name, val.into());
     }
 
     pub fn add_component_mixin<S>(&mut self, name: S, val: S, area: &M2Area)
@@ -142,15 +250,17 @@ impl State {
     {
         let name = name.into();
         let val = val.into();
-        dbg!(&name);
-        dbg!(&val);
+
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::JsMixin(area.clone(), name.clone()),
+        );
 
         if let Some(component) = js::text_to_component(self, &val, Path::new("")) {
-            if let Some(vec) = self.js_mixins[area.id()].get_mut(&name) {
-                vec.push(dbg!(component));
-            } else {
-                self.js_mixins[area.id()].insert(name, vec![dbg!(component)]);
-            }
+            self.js_mixins[area.id()]
+                .entry(name)
+                .or_insert_with(Vec::new)
+                .push(component);
         }
     }
 
@@ -165,15 +275,11 @@ impl State {
     }
 
     pub fn list_front_themes_paths(&self) -> Vec<&PathBuf> {
-        self.magento_front_themes
-            .values()
-            .collect::<Vec<&PathBuf>>()
+        self.front_themes.values().collect::<Vec<&PathBuf>>()
     }
 
     pub fn list_admin_themes_paths(&self) -> Vec<&PathBuf> {
-        self.magento_admin_themes
-            .values()
-            .collect::<Vec<&PathBuf>>()
+        self.admin_themes.values().collect::<Vec<&PathBuf>>()
     }
 
     pub fn workspace_paths(&self) -> Vec<PathBuf> {

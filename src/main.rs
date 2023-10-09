@@ -19,7 +19,10 @@ use lsp_types::{
     WorkDoneProgressOptions,
 };
 
-use crate::{m2::M2Uri, state::State};
+use crate::{
+    m2::{M2Path, M2Uri},
+    state::State,
+};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Note that  we must have our logging only write out to stderr.
@@ -135,9 +138,15 @@ fn main_loop(
                     let params: DidChangeTextDocumentParams = serde_json::from_value(not.params)
                         .context("Deserializing notification params")?;
                     let path = params.text_document.uri.to_path_buf();
-                    state
-                        .lock()
-                        .set_file(&path, &params.content_changes[0].text);
+                    match path.get_ext().as_str() {
+                        "js" | "xml" => state
+                            .lock()
+                            .set_file(&path, &params.content_changes[0].text),
+                        "php" if path.ends_with("registration.php") => state
+                            .lock()
+                            .set_file(&path, &params.content_changes[0].text),
+                        _ => (),
+                    }
                     #[cfg(debug_assertions)]
                     eprintln!("textDocument/didChange: {path:?}");
                 }
