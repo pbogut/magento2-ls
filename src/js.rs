@@ -53,16 +53,26 @@ pub fn update_index(state: &ArcState, path: &PathBuf) {
     );
 }
 
+pub fn maybe_index_file(state: &mut State, content: &str, file_path: &PathBuf) {
+    if file_path.to_path_str().ends_with("requirejs-config.js") {
+        update_index_from_config(state, content, file_path);
+    }
+}
+
+fn index_file(state: &ArcState, file_path: &PathBuf) {
+    let content =
+        std::fs::read_to_string(file_path).expect("Should have been able to read the file");
+
+    update_index_from_config(&mut state.lock(), &content, file_path);
+}
+
 fn process_glob(state: &ArcState, glob_path: &PathBuf) {
     let modules = glob(glob_path.to_path_str())
         .expect("Failed to read glob pattern")
         .filter_map(Result::ok);
 
     for file_path in modules {
-        let content =
-            std::fs::read_to_string(&file_path).expect("Should have been able to read the file");
-
-        update_index_from_config(state, &content, &file_path.get_area());
+        index_file(state, &file_path);
     }
 }
 
@@ -159,7 +169,9 @@ pub fn text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Ite
     }
 }
 
-fn update_index_from_config(state: &ArcState, content: &str, area: &M2Area) {
+fn update_index_from_config(state: &mut State, content: &str, file_path: &PathBuf) {
+    state.set_source_file(file_path);
+    let area = &file_path.get_area();
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_require_config();
 
@@ -170,8 +182,8 @@ fn update_index_from_config(state: &ArcState, content: &str, area: &M2Area) {
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
         match get_kind(m.captures[1].node, content) {
-            Some(JSTypes::Map | JSTypes::Paths) => state.lock().add_component_map(key, val, area),
-            Some(JSTypes::Mixins) => state.lock().add_component_mixin(key, val, area),
+            Some(JSTypes::Map | JSTypes::Paths) => state.add_component_map(key, val, area),
+            Some(JSTypes::Mixins) => state.add_component_mixin(key, val, area),
             None => continue,
         };
     }
@@ -237,7 +249,7 @@ mod test {
         "#;
 
         let arc_state = state.into_arc();
-        update_index_from_config(&arc_state, content, &M2Area::Base);
+        update_index_from_config(&mut arc_state.lock(), content, &PathBuf::from(""));
 
         let mut result = State::new();
         result.add_component_map(
@@ -262,8 +274,27 @@ mod test {
             &M2Area::Base,
         );
         result.add_component_mixin("Adobe_Module", "My_Module/js/mixin/adobe", &M2Area::Base);
+        result.set_source_file(&PathBuf::from(""));
 
-        assert_eq!(arc_state.lock().to_owned(), result);
+        let computed = arc_state.lock();
+        assert_eq!(computed.get_modules(), result.get_modules());
+        for module in [
+            "prototype",
+            "otherComp",
+            "other/core/extension",
+            "some/js/component",
+        ] {
+            assert_eq!(
+                computed.get_component_map(module, &M2Area::Base),
+                result.get_component_map(module, &M2Area::Base)
+            );
+        }
+        for mixin in ["Mage_Module/js/smth", "Adobe_Module"] {
+            assert_eq!(
+                computed.get_component_mixins_for_area(mixin, &M2Area::Base),
+                result.get_component_mixins_for_area(mixin, &M2Area::Base)
+            );
+        }
     }
 
     #[test]
