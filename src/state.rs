@@ -74,7 +74,7 @@ pub struct State {
     front_themes: HashMap<String, PathBuf>,
     admin_themes: HashMap<String, PathBuf>,
     js_maps: [HashMap<String, String>; 3],
-    js_mixins: [HashMap<String, Vec<M2Item>>; 3],
+    js_mixins: [HashMap<String, Vec<String>>; 3],
     workspaces: Vec<PathBuf>,
 }
 
@@ -256,22 +256,23 @@ impl State {
             Trackee::JsMixin(area.clone(), name.clone()),
         );
 
-        if let Some(component) = js::text_to_component(self, &val, Path::new("")) {
-            self.js_mixins[area.id()]
-                .entry(name)
-                .or_insert_with(Vec::new)
-                .push(component);
-        }
+        self.js_mixins[area.id()]
+            .entry(name)
+            .or_insert_with(Vec::new)
+            .push(val);
     }
 
     pub fn get_component_mixins_for_area<S>(&self, name: S, area: &M2Area) -> Vec<M2Item>
     where
         S: Into<String>,
     {
+        let empty_path = Path::new("");
         self.js_mixins[area.id()]
             .get(&name.into())
-            .cloned()
-            .unwrap_or_default()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|mod_string| js::text_to_component(self, mod_string, empty_path))
+            .collect()
     }
 
     pub fn list_front_themes_paths(&self) -> Vec<&PathBuf> {
