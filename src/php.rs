@@ -138,7 +138,9 @@ fn update_index_from_registration(state: &mut State, content: &str, file_path: &
                 state.add_module(mod_name).add_module_path(m, parent);
             }
             Some(M2Module::Library(l)) => {
-                state.add_module_path(l, parent);
+                state
+                    .add_module(&l.replace('\\', "_"))
+                    .add_module_path(l, parent);
             }
             Some(M2Module::FrontTheme(t)) => {
                 state.add_front_theme_path(t, parent);

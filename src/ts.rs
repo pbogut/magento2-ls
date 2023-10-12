@@ -15,10 +15,7 @@ pub fn get_range_from_node(node: Node) -> Range {
 }
 
 pub fn get_node_text_before_pos(node: Node, content: &str, pos: Position) -> String {
-    let text = node
-        .utf8_text(content.as_bytes())
-        .unwrap_or("")
-        .trim_matches('\\');
+    let text = node.utf8_text(content.as_bytes()).unwrap_or("");
 
     let node_start_pos = node.start_position();
     let node_end_pos = node.end_position();
