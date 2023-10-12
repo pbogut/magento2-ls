@@ -4,14 +4,14 @@ use lsp_types::Location;
 
 use crate::{
     m2::{M2Item, M2Path},
-    state::ArcState,
+    state::State,
 };
 
 use super::path_to_location;
 
-pub fn find_plain(state: &ArcState, comp: &str) -> Vec<Location> {
+pub fn find_plain(state: &State, comp: &str) -> Vec<Location> {
     let mut result = vec![];
-    let workspace_paths = state.lock().workspace_paths();
+    let workspace_paths = state.workspace_paths();
     for path in workspace_paths {
         let path = path.append(&["lib", "web", comp]).append_ext("js");
         if let Some(location) = path_to_location(&path) {
@@ -27,7 +27,7 @@ pub fn find_rel(comp: String, path: &Path) -> Option<Vec<Location>> {
 }
 
 pub fn mod_location(
-    state: &ArcState,
+    state: &State,
     mod_name: String,
     file_path: &str,
     mod_path: PathBuf,
@@ -41,11 +41,7 @@ pub fn mod_location(
     )];
 
     let area = path.get_area();
-    components.extend(
-        state
-            .lock()
-            .get_component_mixins_for_area(mod_name + "/" + file_path, &area),
-    );
+    components.extend(state.get_component_mixins_for_area(mod_name + "/" + file_path, &area));
 
     for component in components {
         if let M2Item::ModComponent(_, file_path, mod_path) = component {
