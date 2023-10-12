@@ -11,12 +11,12 @@ use lsp_types::{
 use crate::{
     js::{self, JsCompletionType},
     m2::{self, M2Area, M2Path, M2Uri},
-    state::ArcState,
+    state::State,
     xml,
 };
 
 pub fn get_completion_from_params(
-    state: &ArcState,
+    state: &State,
     params: &CompletionParams,
 ) -> Option<Vec<CompletionItem>> {
     let path = params
@@ -34,11 +34,11 @@ pub fn get_completion_from_params(
 }
 
 fn js_completion_handler(
-    state: &ArcState,
+    state: &State,
     path: &PathBuf,
     pos: Position,
 ) -> Option<Vec<CompletionItem>> {
-    let at_position = js::get_completion_item(state.lock().get_file(path)?, pos)?;
+    let at_position = js::get_completion_item(state.get_file(path)?, pos)?;
 
     match at_position.kind {
         JsCompletionType::Definition => completion_for_component(
@@ -51,11 +51,11 @@ fn js_completion_handler(
 }
 
 fn xml_completion_handler(
-    state: &ArcState,
+    state: &State,
     path: &PathBuf,
     pos: Position,
 ) -> Option<Vec<CompletionItem>> {
-    let at_position = xml::get_current_position_path(state.lock().get_file(path)?, pos)?;
+    let at_position = xml::get_current_position_path(state.get_file(path)?, pos)?;
     match at_position {
         x if x.match_path("[@template]") => {
             completion_for_template(state, &x.text, x.range, &path.get_area())
@@ -101,11 +101,7 @@ fn xml_completion_handler(
     }
 }
 
-fn completion_for_classes(
-    state: &ArcState,
-    text: &str,
-    range: Range,
-) -> Option<Vec<CompletionItem>> {
+fn completion_for_classes(state: &State, text: &str, range: Range) -> Option<Vec<CompletionItem>> {
     let text = text.trim_start_matches('\\');
     if text.is_empty() || (m2::is_part_of_class_name(text) && text.matches('\\').count() == 0) {
         Some(completion_for_classes_prefix(state, range))
@@ -118,12 +114,12 @@ fn completion_for_classes(
     }
 }
 
-fn completion_for_classes_prefix(state: &ArcState, range: Range) -> Vec<CompletionItem> {
-    let module_prefixes = state.lock().get_module_class_prefixes();
+fn completion_for_classes_prefix(state: &State, range: Range) -> Vec<CompletionItem> {
+    let module_prefixes = state.get_module_class_prefixes();
     string_vec_and_range_to_completion_list(module_prefixes, range)
 }
 
-fn completion_for_classes_full(state: &ArcState, text: &str, range: Range) -> Vec<CompletionItem> {
+fn completion_for_classes_full(state: &State, text: &str, range: Range) -> Vec<CompletionItem> {
     let mut classes = vec![];
     let mut index = 0;
     let splits: Vec<usize> = text
@@ -140,7 +136,7 @@ fn completion_for_classes_full(state: &ArcState, text: &str, range: Range) -> Ve
 
     for spllit in splits {
         let prefix = &text[..spllit - 1];
-        if let Some(module_path) = state.lock().get_module_path(prefix) {
+        if let Some(module_path) = state.get_module_path(prefix) {
             let candidates = glob(module_path.append(&["**", "*.php"]).to_path_str())
                 .expect("Failed to read glob pattern");
             for p in candidates {
@@ -166,17 +162,17 @@ fn completion_for_classes_full(state: &ArcState, text: &str, range: Range) -> Ve
 }
 
 fn completion_for_template(
-    state: &ArcState,
+    state: &State,
     text: &str,
     range: Range,
     area: &M2Area,
 ) -> Option<Vec<CompletionItem>> {
     if text.is_empty() || m2::is_part_of_module_name(text) {
-        let modules = state.lock().get_modules();
+        let modules = state.get_modules();
         Some(string_vec_and_range_to_completion_list(modules, range))
     } else if text.contains("::") {
         let module_name = text.split("::").next()?;
-        let path = state.lock().get_module_path(module_name);
+        let path = state.get_module_path(module_name);
         match path {
             None => None,
             Some(path) => {
@@ -202,7 +198,7 @@ fn completion_for_template(
 }
 
 fn completion_for_component(
-    state: &ArcState,
+    state: &State,
     text: &str,
     range: Range,
     area: &M2Area,
@@ -210,7 +206,7 @@ fn completion_for_component(
     if text.contains('/') {
         let module_name = text.split('/').next()?;
         let mut files = vec![];
-        if let Some(path) = state.lock().get_module_path(module_name) {
+        if let Some(path) = state.get_module_path(module_name) {
             for area in area.path_candidates() {
                 let view_path = path.append(&["view", area, "web"]);
                 let glob_path = view_path.append(&["**", "*.js"]);
@@ -225,7 +221,7 @@ fn completion_for_component(
                 }));
             }
         }
-        let workspaces = state.lock().workspace_paths();
+        let workspaces = state.workspace_paths();
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);
@@ -239,19 +235,19 @@ fn completion_for_component(
             }));
         }
 
-        files.extend(state.lock().get_component_maps_for_area(area));
+        files.extend(state.get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
-            files.extend(state.lock().get_component_maps_for_area(&lower_area));
+            files.extend(state.get_component_maps_for_area(&lower_area));
         }
         Some(string_vec_and_range_to_completion_list(files, range))
     } else {
         let mut modules = vec![];
-        modules.extend(state.lock().get_modules());
-        modules.extend(state.lock().get_component_maps_for_area(area));
+        modules.extend(state.get_modules());
+        modules.extend(state.get_component_maps_for_area(area));
         if let Some(lower_area) = area.lower_area() {
-            modules.extend(state.lock().get_component_maps_for_area(&lower_area));
+            modules.extend(state.get_component_maps_for_area(&lower_area));
         }
-        let workspaces = state.lock().workspace_paths();
+        let workspaces = state.workspace_paths();
         for path in workspaces {
             let view_path = path.append(&["lib", "web"]);
             let glob_path = view_path.append(&["**", "*.js"]);

@@ -108,7 +108,7 @@ fn main_loop(
                 match req.method.as_str() {
                     "textDocument/completion" => {
                         let (id, params) = cast::<Completion>(req)?;
-                        let result = lsp::completion_handler(&state, &params);
+                        let result = lsp::completion_handler(&state.lock(), &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     "textDocument/definition" => {
