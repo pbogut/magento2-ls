@@ -5,10 +5,11 @@ use lsp_types::{
     CompletionParams, CompletionResponse, GotoDefinitionParams, GotoDefinitionResponse,
 };
 
-use crate::state::ArcState;
+use crate::state::{ArcState, State};
 
 use self::{completion::get_completion_from_params, definition::get_location_from_params};
-pub fn completion_handler(state: &ArcState, params: &CompletionParams) -> CompletionResponse {
+
+pub fn completion_handler(state: &State, params: &CompletionParams) -> CompletionResponse {
     CompletionResponse::Array(
         get_completion_from_params(state, params).map_or(vec![], |loc_list| loc_list),
     )
