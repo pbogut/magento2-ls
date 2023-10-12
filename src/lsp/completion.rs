@@ -109,14 +109,10 @@ fn completion_for_classes(
     let text = text.trim_start_matches('\\');
     if text.is_empty() || (m2::is_part_of_class_name(text) && text.matches('\\').count() == 0) {
         Some(completion_for_classes_prefix(state, range))
-    } else if text.matches('\\').count() == 1 {
+    } else if text.matches('\\').count() >= 1 {
         let mut result = completion_for_classes_prefix(state, range);
-        if let Some(classes) = completion_for_classes_full(state, text, range) {
-            result.extend(classes);
-        }
+        result.extend(completion_for_classes_full(state, text, range));
         Some(result)
-    } else if text.matches('\\').count() >= 2 {
-        completion_for_classes_full(state, text, range)
     } else {
         None
     }
@@ -127,41 +123,46 @@ fn completion_for_classes_prefix(state: &ArcState, range: Range) -> Vec<Completi
     string_vec_and_range_to_completion_list(module_prefixes, range)
 }
 
-fn completion_for_classes_full(
-    state: &ArcState,
-    text: &str,
-    range: Range,
-) -> Option<Vec<CompletionItem>> {
-    let mut parts = text.split('\\');
-
-    let module_name = format!("{}_{}", parts.next()?, parts.next()?);
-
-    let mut parts = text.split('\\').collect::<Vec<&str>>();
-    parts.pop();
-    let typed_class_prefix = parts.join("\\");
-
-    let module_class = module_name.replace('_', "\\");
-    let module_path = state.lock().get_module_path(&module_name)?;
-    let candidates = glob(module_path.append(&["**", "*.php"]).to_path_str())
-        .expect("Failed to read glob pattern");
+fn completion_for_classes_full(state: &ArcState, text: &str, range: Range) -> Vec<CompletionItem> {
     let mut classes = vec![];
-    for p in candidates {
-        let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
-        let rel_path = path.relative_to(&module_path).str_components().join("\\");
-        let class_suffix = rel_path.trim_end_matches(".php");
-        let class = format!("{}\\{}", &module_class, class_suffix);
+    let mut index = 0;
+    let splits: Vec<usize> = text
+        .chars()
+        .filter_map(|c| {
+            index += 1;
+            if c == '\\' {
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .collect();
 
-        if class.ends_with("\\registration") {
-            continue;
+    for spllit in splits {
+        let prefix = &text[..spllit - 1];
+        if let Some(module_path) = state.lock().get_module_path(prefix) {
+            let candidates = glob(module_path.append(&["**", "*.php"]).to_path_str())
+                .expect("Failed to read glob pattern");
+            for p in candidates {
+                let path = p.map_or_else(|_| std::path::PathBuf::new(), |p| p);
+                let rel_path = path.relative_to(&module_path).str_components().join("\\");
+                let class_suffix = rel_path.trim_end_matches(".php");
+                let class = format!("{}\\{}", prefix, class_suffix);
+
+                if class.ends_with("\\registration") {
+                    continue;
+                }
+
+                if !class.starts_with(&text[..index - 1]) {
+                    continue;
+                }
+
+                classes.push(class);
+            }
         }
-
-        if !class.starts_with(&typed_class_prefix) {
-            continue;
-        }
-
-        classes.push(class);
     }
-    Some(string_vec_and_range_to_completion_list(classes, range))
+
+    string_vec_and_range_to_completion_list(classes, range)
 }
 
 fn completion_for_template(
