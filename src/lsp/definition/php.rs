@@ -1,21 +1,20 @@
 use lsp_types::Location;
-use parking_lot::MutexGuard;
 
 use crate::{
     php::{parse_php_file, PHPClass},
-    state::{ArcState, State},
+    state::State,
 };
 
-pub fn find_class(state: &ArcState, class: &str) -> Option<Location> {
-    let phpclass = get_php_class_from_class_name(&state.lock(), class)?;
+pub fn find_class(state: &State, class: &str) -> Option<Location> {
+    let phpclass = get_php_class_from_class_name(state, class)?;
     Some(Location {
         uri: phpclass.uri.clone(),
         range: phpclass.range,
     })
 }
 
-pub fn find_method(state: &ArcState, class: &str, method: &str) -> Option<Location> {
-    let phpclass = get_php_class_from_class_name(&state.lock(), class)?;
+pub fn find_method(state: &State, class: &str, method: &str) -> Option<Location> {
+    let phpclass = get_php_class_from_class_name(state, class)?;
     Some(Location {
         uri: phpclass.uri.clone(),
         range: phpclass
@@ -25,8 +24,8 @@ pub fn find_method(state: &ArcState, class: &str, method: &str) -> Option<Locati
     })
 }
 
-pub fn find_const(state: &ArcState, class: &str, constant: &str) -> Option<Location> {
-    let phpclass = get_php_class_from_class_name(&state.lock(), class)?;
+pub fn find_const(state: &State, class: &str, constant: &str) -> Option<Location> {
+    let phpclass = get_php_class_from_class_name(state, class)?;
     Some(Location {
         uri: phpclass.uri.clone(),
         range: phpclass
@@ -36,7 +35,7 @@ pub fn find_const(state: &ArcState, class: &str, constant: &str) -> Option<Locat
     })
 }
 
-fn get_php_class_from_class_name(state: &MutexGuard<State>, class: &str) -> Option<PHPClass> {
+fn get_php_class_from_class_name(state: &State, class: &str) -> Option<PHPClass> {
     let module_path = state.split_class_to_path_and_suffix(class);
     match module_path {
         None => None,

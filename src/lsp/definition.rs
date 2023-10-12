@@ -8,11 +8,11 @@ use lsp_types::{GotoDefinitionParams, Location, Range, Url};
 
 use crate::{
     m2::{M2Item, M2Uri},
-    state::ArcState,
+    state::State,
 };
 
 pub fn get_location_from_params(
-    state: &ArcState,
+    state: &State,
     params: &GotoDefinitionParams,
 ) -> Option<Vec<Location>> {
     let path = params
@@ -21,7 +21,7 @@ pub fn get_location_from_params(
         .uri
         .to_path_buf();
     let pos = params.text_document_position_params.position;
-    let item = state.lock().get_item_from_position(&path, pos)?;
+    let item = state.get_item_from_position(&path, pos)?;
     Some(match item {
         M2Item::ModComponent(mod_name, file_path, mod_path) => {
             component::mod_location(state, mod_name, &file_path, mod_path, &path)

@@ -113,7 +113,7 @@ fn main_loop(
                     }
                     "textDocument/definition" => {
                         let (id, params) = cast::<GotoDefinition>(req)?;
-                        let result = lsp::definition_handler(&state, &params);
+                        let result = lsp::definition_handler(&state.lock(), &params);
                         connection.sender.send(get_response_message(id, result))?;
                     }
                     _ => {
