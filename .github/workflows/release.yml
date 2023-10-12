@@ -162,3 +162,19 @@ jobs:
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Extension (Code Marketplace, release)
+        if: env.SHOULD_RELEASE == 'yes'
+        shell: bash
+        run: |
+          cd "vscode"
+          npm install --include=dev
+          npx vsce publish --pat ${{ secrets.MARKETPLACE_TOKEN }} --packagePath ../dist/magento2-ls.*.vsix
+
+      - name: Publish Extension (OpenVSX, release)
+        if: env.SHOULD_RELEASE == 'yes'
+        shell: bash
+        run: |
+          cd "vscode"
+          npm install --include=dev
+          npx ovsx publish --pat ${{ secrets.OPENVSX_TOKEN }} --packagePath ../dist/magento2-ls.*.vsix
