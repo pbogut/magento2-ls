@@ -69,6 +69,18 @@ Be PHP Language Server (or XML LS) in any capacity.
 [Intelephense](https://intelephense.com/) works nice with Magento 2 if you need 
 LS for your project.
 
+## Requirements
+
+In order to complete Magento classes, the Magento root folder must be opened in the workspace.
+
+The language server detects Magento modules by searching for `registration.php` files in the following locations:
+
+- The root folder (for modules added to the workspace)
+- `app/code/*/*/` - for local modules
+- `vendor/*/*/` - for vendor modules
+- `app/design/*/*/*/` - for themes.
+
+
 ## Contributing
 
 If you would like to contribute, please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/pbogut/magento2-ls). 
