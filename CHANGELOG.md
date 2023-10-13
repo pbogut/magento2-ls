@@ -4,15 +4,11 @@
 
 #### Features
 
-- [ ] No completion for "Magento\Framework"
+- Added mixins to the definition locations of JS components.
+- Added state updates when changes occur in `registration.php` and `requirejs-config.js`.
+- Increased indexing speed by searching only specific locations.
+- Added suggestions for library modules, such as `magento-framework`.
 
-- Update state on `registration.php` and `requirejs-config.js` change.
-- Added mixins to definition locations of JS components.
-- Speed up indexing by searching only specific locations.
-
-#### Fixes
-
-- Please provide suggestions for library modules (such as `magento-framework`).
 
 ## [0.0.5 - October 4, 2023]
 
