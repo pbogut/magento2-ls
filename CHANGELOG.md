@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.0.6 - Work In Progress]
+## [0.0.6 - October 13, 2023]
 
 #### Features
 
