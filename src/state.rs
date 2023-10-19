@@ -283,6 +283,18 @@ impl State {
         self.admin_themes.values().collect::<Vec<&PathBuf>>()
     }
 
+    pub fn list_themes_paths(&self, area: &M2Area) -> Vec<&PathBuf> {
+        match area {
+            M2Area::Base => self
+                .admin_themes
+                .values()
+                .chain(self.front_themes.values())
+                .collect::<Vec<&PathBuf>>(),
+            M2Area::Adminhtml => self.admin_themes.values().collect::<Vec<&PathBuf>>(),
+            M2Area::Frontend => self.front_themes.values().collect::<Vec<&PathBuf>>(),
+        }
+    }
+
     pub fn workspace_paths(&self) -> Vec<PathBuf> {
         self.workspaces.clone()
     }
