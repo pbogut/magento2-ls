@@ -172,26 +172,36 @@ fn completion_for_template(
         Some(string_vec_and_range_to_completion_list(modules, range))
     } else if text.contains("::") {
         let module_name = text.split("::").next()?;
-        let path = state.get_module_path(module_name);
-        match path {
-            None => None,
-            Some(path) => {
-                let mut files = vec![];
-                for area_string in area.path_candidates() {
-                    let view_path = path.append(&["view", area_string, "templates"]);
-                    let glob_path = view_path.append(&["**", "*.phtml"]);
-                    files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
-                        let path = file
-                            .unwrap_or_default()
-                            .relative_to(&view_path)
-                            .str_components()
-                            .join("/");
-                        String::from(module_name) + "::" + &path
-                    }));
-                }
-                Some(string_vec_and_range_to_completion_list(files, range))
-            }
+        let path = state.get_module_path(module_name)?;
+        let mut theme_paths = state.list_themes_paths(&area);
+        theme_paths.push(&path);
+
+        let mut files = vec![];
+        for area_string in area.path_candidates() {
+            let view_path = path.append(&["view", area_string, "templates"]);
+            let glob_path = view_path.append(&["**", "*.phtml"]);
+            files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
+                let path = file
+                    .unwrap_or_default()
+                    .relative_to(&view_path)
+                    .str_components()
+                    .join("/");
+                String::from(module_name) + "::" + &path
+            }));
         }
+        for theme_path in theme_paths {
+            let view_path = theme_path.append(&[module_name, "templates"]);
+            let glob_path = view_path.append(&["**", "*.phtml"]);
+            files.extend(glob::glob(glob_path.to_path_str()).ok()?.map(|file| {
+                let path = file
+                    .unwrap_or_default()
+                    .relative_to(&view_path)
+                    .str_components()
+                    .join("/");
+                String::from(module_name) + "::" + &path
+            }));
+        }
+        Some(string_vec_and_range_to_completion_list(files, range))
     } else {
         None
     }
