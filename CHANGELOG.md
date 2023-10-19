@@ -9,7 +9,6 @@
 - Increased indexing speed by searching only specific locations.
 - Added suggestions for library modules, such as `magento-framework`.
 
-
 ## [0.0.5 - October 4, 2023]
 
 #### Features
@@ -19,7 +18,6 @@
 - Added completion for JS components in XML and JS files.
 - Added completion for Magento events in XML files.
 
-
 ## [0.0.4 - September 25, 2023]
 
 #### Features
@@ -27,7 +25,6 @@
 - Added go to definition support for JS files.
 - Added support for workspaces.
 - Indexed files in separate threads to speed up startup.
-
 
 #### Features
 
