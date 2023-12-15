@@ -180,6 +180,59 @@ pub fn is_part_of_class_name(text: &str) -> bool {
     true
 }
 
+pub(crate) fn try_any_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
+    if does_ext_eq(text, "phtml") {
+        try_phtml_item_from_str(text, area)
+    } else if text.contains("::") {
+        try_const_item_from_str(text)
+    } else if text.chars().next()?.is_uppercase() {
+        Some(get_class_item_from_str(text))
+    } else {
+        None
+    }
+}
+
+pub(crate) fn try_const_item_from_str(text: &str) -> Option<M2Item> {
+    if text.split("::").count() == 2 {
+        let mut parts = text.split("::");
+        Some(M2Item::Const(parts.next()?.into(), parts.next()?.into()))
+    } else {
+        None
+    }
+}
+
+pub(crate) fn get_class_item_from_str(text: &str) -> M2Item {
+    M2Item::Class(text.into())
+}
+
+pub(crate) fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
+    if text.split("::").count() == 2 {
+        let mut parts = text.split("::");
+        match area {
+            M2Area::Frontend => Some(M2Item::FrontPhtml(
+                parts.next()?.into(),
+                parts.next()?.into(),
+            )),
+            M2Area::Adminhtml => Some(M2Item::AdminPhtml(
+                parts.next()?.into(),
+                parts.next()?.into(),
+            )),
+            M2Area::Base => Some(M2Item::BasePhtml(
+                parts.next()?.into(),
+                parts.next()?.into(),
+            )),
+        }
+    } else {
+        None
+    }
+}
+
+fn does_ext_eq(path: &str, ext: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .map_or(false, |e| e.eq_ignore_ascii_case(ext))
+}
+
 #[cfg(test)]
 mod test {
     use crate::m2::M2Path;
