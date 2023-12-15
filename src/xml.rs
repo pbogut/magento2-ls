@@ -1,13 +1,10 @@
 use lsp_types::{Position, Range};
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 use tree_sitter::{Node, QueryCursor};
 
 use crate::{
     js,
-    m2::{M2Area, M2Item, M2Path},
+    m2::{self, M2Item, M2Path},
     queries,
     state::State,
     ts::{get_node_str, get_node_text_before_pos, node_at_position, node_last_child},
@@ -245,10 +242,12 @@ fn get_item_from_pos(
     match tag.hover_on {
         XmlPart::Attribute(ref attr_name) => match attr_name.as_str() {
             "method" | "instance" | "class" => try_method_item_from_tag(&tag).or_else(|| {
-                try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area())
+                m2::try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area())
             }),
-            "template" => try_phtml_item_from_str(tag.attributes.get(attr_name)?, &path.get_area()),
-            _ => try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area()),
+            "template" => {
+                m2::try_phtml_item_from_str(tag.attributes.get(attr_name)?, &path.get_area())
+            }
+            _ => m2::try_any_item_from_str(tag.attributes.get(attr_name)?, &path.get_area()),
         },
         XmlPart::Text => {
             let text = tag.text.trim_matches('\\');
@@ -256,17 +255,17 @@ fn get_item_from_pos(
             let xsi_type = tag.attributes.get("xsi:type").unwrap_or(&empty);
 
             match xsi_type.as_str() {
-                "object" => Some(get_class_item_from_str(text)),
-                "init_parameter" => try_const_item_from_str(text),
+                "object" => Some(m2::get_class_item_from_str(text)),
+                "init_parameter" => m2::try_const_item_from_str(text),
                 "string" => {
                     if tag.attributes.get("name").is_some_and(|s| s == "component") {
                         let text = js::resolve_component_text(state, text, &path.get_area())?;
                         js::text_to_component(state, text, path)
                     } else {
-                        try_any_item_from_str(text, &path.get_area())
+                        m2::try_any_item_from_str(text, &path.get_area())
                     }
                 }
-                _ => try_any_item_from_str(text, &path.get_area()),
+                _ => m2::try_any_item_from_str(text, &path.get_area()),
             }
         }
         XmlPart::None => None,
@@ -332,53 +331,6 @@ fn get_xml_tag_at_pos(content: &str, pos: Position) -> Option<XmlTag> {
     Some(tag)
 }
 
-fn try_any_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
-    if does_ext_eq(text, "phtml") {
-        try_phtml_item_from_str(text, area)
-    } else if text.contains("::") {
-        try_const_item_from_str(text)
-    } else if text.chars().next()?.is_uppercase() {
-        Some(get_class_item_from_str(text))
-    } else {
-        None
-    }
-}
-
-fn try_const_item_from_str(text: &str) -> Option<M2Item> {
-    if text.split("::").count() == 2 {
-        let mut parts = text.split("::");
-        Some(M2Item::Const(parts.next()?.into(), parts.next()?.into()))
-    } else {
-        None
-    }
-}
-
-fn get_class_item_from_str(text: &str) -> M2Item {
-    M2Item::Class(text.into())
-}
-
-fn try_phtml_item_from_str(text: &str, area: &M2Area) -> Option<M2Item> {
-    if text.split("::").count() == 2 {
-        let mut parts = text.split("::");
-        match area {
-            M2Area::Frontend => Some(M2Item::FrontPhtml(
-                parts.next()?.into(),
-                parts.next()?.into(),
-            )),
-            M2Area::Adminhtml => Some(M2Item::AdminPhtml(
-                parts.next()?.into(),
-                parts.next()?.into(),
-            )),
-            M2Area::Base => Some(M2Item::BasePhtml(
-                parts.next()?.into(),
-                parts.next()?.into(),
-            )),
-        }
-    } else {
-        None
-    }
-}
-
 fn try_method_item_from_tag(tag: &XmlTag) -> Option<M2Item> {
     if tag.attributes.get("instance").is_some() && tag.attributes.get("method").is_some() {
         Some(M2Item::Method(
@@ -393,12 +345,6 @@ fn try_method_item_from_tag(tag: &XmlTag) -> Option<M2Item> {
     } else {
         None
     }
-}
-
-fn does_ext_eq(path: &str, ext: &str) -> bool {
-    Path::new(path)
-        .extension()
-        .map_or(false, |e| e.eq_ignore_ascii_case(ext))
 }
 
 #[cfg(test)]
