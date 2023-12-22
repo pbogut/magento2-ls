@@ -114,6 +114,16 @@ pub fn get_item_from_position(state: &State, path: &PathBuf, pos: Position) -> O
     get_item_from_pos(state, content, path, pos)
 }
 
+pub fn text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Item> {
+    let mut text = text;
+    if text.starts_with("text!") {
+        text = &text[5..];
+    }
+    let text = &resolve_paths(state, text, &path.to_path_buf().get_area())?;
+    let text = resolve_maps(state, text, &path.to_path_buf().get_area())?;
+    return resolved_text_to_component(state, text, path);
+}
+
 fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -> Option<M2Item> {
     let tree = tree_sitter_parsers::parse(content, "javascript");
     let query = queries::js_item_from_pos();
@@ -122,11 +132,7 @@ fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -
 
     for m in matches {
         if node_at_position(m.captures[0].node, pos) {
-            let mut text = get_node_text(m.captures[0].node, content);
-            if text.starts_with("text!") {
-                text = &text[5..];
-            }
-            let text = resolve_component_text(state, text, &path.to_path_buf().get_area())?;
+            let text = get_node_text(m.captures[0].node, content);
             return text_to_component(state, text, path);
         }
     }
@@ -134,21 +140,30 @@ fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -
     None
 }
 
-pub fn resolve_component_text<'a>(
-    state: &'a State,
-    text: &'a str,
-    area: &M2Area,
-) -> Option<&'a str> {
+fn resolve_paths(state: &State, text: &str, area: &M2Area) -> Option<String> {
+    let mut result = String::from(text);
+    let paths = state.get_component_paths_for_area(area);
+    for path in paths {
+        let path_slash = path.clone() + "/";
+        if text == path || text.starts_with(&path_slash) {
+            let new_path = state.get_component_path(&path, area)?;
+            result = result.replacen(&path, new_path, 1);
+        };
+    }
+    Some(result)
+}
+
+fn resolve_maps<'a>(state: &'a State, text: &'a str, area: &M2Area) -> Option<&'a str> {
     state.get_component_map(text, area).map_or_else(
         || {
             area.lower_area()
-                .map_or_else(|| Some(text), |a| resolve_component_text(state, text, &a))
+                .map_or_else(|| Some(text), |a| resolve_maps(state, text, &a))
         },
-        |t| resolve_component_text(state, t, area),
+        |t| resolve_maps(state, t, area),
     )
 }
 
-pub fn text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Item> {
+fn resolved_text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
     if text.ends_with(".html") {
@@ -190,7 +205,8 @@ fn update_index_from_config(state: &mut State, content: &str, file_path: &PathBu
         let key = get_node_text(m.captures[2].node, content);
         let val = get_node_text(m.captures[3].node, content);
         match get_kind(m.captures[1].node, content) {
-            Some(JSTypes::Map | JSTypes::Paths) => state.add_component_map(key, val, area),
+            Some(JSTypes::Map) => state.add_component_map(key, val, area),
+            Some(JSTypes::Paths) => state.add_component_path(key, val, area),
             Some(JSTypes::Mixins) => state.add_component_mixin(key, val, area),
             None => continue,
         };
@@ -260,12 +276,12 @@ mod test {
         update_index_from_config(&mut arc_state.lock(), content, &PathBuf::from(""));
 
         let mut result = State::new();
-        result.add_component_map(
+        result.add_component_path(
             "other/core/extension",
             "Other_Module/js/core_ext",
             &M2Area::Base,
         );
-        result.add_component_map(
+        result.add_component_path(
             "prototype",
             "Something_Else/js/prototype.min",
             &M2Area::Base,
