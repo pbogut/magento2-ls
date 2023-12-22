@@ -152,10 +152,7 @@ pub fn js_item_from_pos() -> &'static Query {
     query(
         &JS_ITEM_FROM_POS,
         r#"
-        (
-            (identifier) @def (#eq? @def define)
-            (arguments (array (string) @str))
-        )
+        (string) @str
         "#,
         "javascript",
     )

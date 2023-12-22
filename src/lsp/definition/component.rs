@@ -20,6 +20,7 @@ pub fn find_plain(state: &State, comp: &str) -> Vec<Location> {
     }
     result
 }
+
 pub fn find_rel(comp: String, path: &Path) -> Option<Vec<Location>> {
     let mut path = path.join(comp);
     path.set_extension("js");
@@ -53,6 +54,19 @@ pub fn mod_location(
                     result.push(location);
                 }
             }
+        }
+    }
+
+    result
+}
+
+pub fn mod_html_location(file_path: &str, mod_path: PathBuf, path: &PathBuf) -> Vec<Location> {
+    let mut result = vec![];
+    let area = path.get_area();
+    for area_path in area.path_candidates() {
+        let comp_path = mod_path.append(&["view", area_path, "web", &file_path]);
+        if let Some(location) = path_to_location(&comp_path) {
+            result.push(location);
         }
     }
 
