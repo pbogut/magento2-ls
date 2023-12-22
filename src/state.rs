@@ -35,6 +35,7 @@ enum Trackee {
     ModulePath(String),
     JsMap(M2Area, String),
     JsMixin(M2Area, String),
+    JsPaths(M2Area, String),
     Themes(M2Area, String),
 }
 
@@ -75,6 +76,7 @@ pub struct State {
     admin_themes: HashMap<String, PathBuf>,
     js_maps: [HashMap<String, String>; 3],
     js_mixins: [HashMap<String, Vec<String>>; 3],
+    js_paths: [HashMap<String, String>; 3],
     workspaces: Vec<PathBuf>,
 }
 
@@ -93,6 +95,7 @@ impl State {
             admin_themes: HashMap::new(),
             js_maps: [HashMap::new(), HashMap::new(), HashMap::new()],
             js_mixins: [HashMap::new(), HashMap::new(), HashMap::new()],
+            js_paths: [HashMap::new(), HashMap::new(), HashMap::new()],
             workspaces: vec![],
         }
     }
@@ -110,6 +113,9 @@ impl State {
                     }
                     Trackee::JsMixin(area, name) => {
                         self.js_mixins[area.id()].remove(&name);
+                    }
+                    Trackee::JsPaths(area, name) => {
+                        self.js_paths[area.id()].remove(&name);
                     }
                     Trackee::Module(module) => {
                         self.modules.retain(|m| m != &module);
@@ -272,6 +278,30 @@ impl State {
             .unwrap_or(&vec![])
             .iter()
             .filter_map(|mod_string| js::text_to_component(self, mod_string, empty_path))
+            .collect()
+    }
+
+    pub fn add_component_path<S>(&mut self, name: S, val: S, area: &M2Area)
+    where
+        S: Into<String>,
+    {
+        let name = name.into();
+        self.track_entities.maybe_track(
+            self.source_file.as_ref(),
+            Trackee::JsPaths(area.clone(), name.clone()),
+        );
+
+        self.js_paths[area.id()].insert(name, val.into());
+    }
+
+    pub fn get_component_path(&self, name: &str, area: &M2Area) -> Option<&String> {
+        self.js_paths[area.id()].get(name)
+    }
+
+    pub fn get_component_paths_for_area(&self, area: &M2Area) -> Vec<String> {
+        self.js_paths[area.id()]
+            .keys()
+            .map(ToString::to_string)
             .collect()
     }
 

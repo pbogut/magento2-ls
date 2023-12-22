@@ -259,7 +259,6 @@ fn get_item_from_pos(
                 "init_parameter" => m2::try_const_item_from_str(text),
                 "string" => {
                     if tag.attributes.get("name").is_some_and(|s| s == "component") {
-                        let text = js::resolve_component_text(state, text, &path.get_area())?;
                         js::text_to_component(state, text, path)
                     } else {
                         m2::try_any_item_from_str(text, &path.get_area())
