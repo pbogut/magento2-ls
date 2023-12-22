@@ -27,6 +27,9 @@ pub fn get_location_from_params(
             component::mod_location(state, mod_name, &file_path, mod_path, &path)
         }
         M2Item::RelComponent(comp, path) => component::find_rel(comp, &path)?,
+        M2Item::ModHtml(mod_name, file_path, mod_path) => {
+            component::mod_html_location(&file_path, mod_path, &path)
+        }
         M2Item::Component(comp) => component::find_plain(state, &comp),
         M2Item::AdminPhtml(mod_name, template) => phtml::find_admin(state, &mod_name, &template),
         M2Item::FrontPhtml(mod_name, template) => phtml::find_front(state, &mod_name, &template),

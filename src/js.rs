@@ -121,8 +121,8 @@ fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -
     let matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
     for m in matches {
-        if node_at_position(m.captures[1].node, pos) {
-            let text = get_node_text(m.captures[1].node, content);
+        if node_at_position(m.captures[0].node, pos) {
+            let text = get_node_text(m.captures[0].node, content);
             let text = resolve_component_text(state, text, &path.to_path_buf().get_area())?;
             return text_to_component(state, text, path);
         }
@@ -148,7 +148,12 @@ pub fn resolve_component_text<'a>(
 pub fn text_to_component(state: &State, text: &str, path: &Path) -> Option<M2Item> {
     let begining = text.split('/').next().unwrap_or("");
 
-    if begining.chars().next().unwrap_or('a') == '.' {
+    if text.ends_with(".html") {
+        let mut parts = text.splitn(2, '/');
+        let mod_name = parts.next()?.to_string();
+        let mod_path = state.get_module_path(&mod_name)?;
+        Some(M2Item::ModHtml(mod_name, parts.next()?.into(), mod_path))
+    } else if begining.chars().next().unwrap_or('a') == '.' {
         let mut path = path.to_path_buf();
         path.pop();
         Some(M2Item::RelComponent(text.into(), path))

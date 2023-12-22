@@ -5,6 +5,7 @@ use lsp_types::Url;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum M2Item {
+    ModHtml(String, String, PathBuf),
     Component(String),
     ModComponent(String, String, PathBuf),
     RelComponent(String, PathBuf),
