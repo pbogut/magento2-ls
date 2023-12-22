@@ -122,7 +122,10 @@ fn get_item_from_pos(state: &State, content: &str, path: &Path, pos: Position) -
 
     for m in matches {
         if node_at_position(m.captures[0].node, pos) {
-            let text = get_node_text(m.captures[0].node, content);
+            let mut text = get_node_text(m.captures[0].node, content);
+            if text.starts_with("text!") {
+                text = &text[5..];
+            }
             let text = resolve_component_text(state, text, &path.to_path_buf().get_area())?;
             return text_to_component(state, text, path);
         }
