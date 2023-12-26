@@ -1,5 +1,13 @@
 # Change Log
 
+## [0.0.7 - December 26, 2023]
+
+#### Features
+
+- Added templates from theme modules to template completions.
+- Added go to template (html) file from JS files.
+- Changed go to definition to work for any JS string.
+
 ## [0.0.6 - October 13, 2023]
 
 #### Features
