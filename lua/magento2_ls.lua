@@ -19,15 +19,17 @@ local function start_lsp(opts)
   end
 end
 
+---@return string|nil
 local function get_machine()
   local machine = vim.loop.os_uname().machine
   if machine == 'x86_64' then
     return 'x64'
-  elseif machine == 'aarch64' then
+  elseif machine == 'aarch64' or machine == 'arm64' then
     return 'arm64'
   end
 end
 
+---@return string|nil
 local function get_system()
   local os = vim.loop.os_uname().sysname
   if os == 'Linux' then
@@ -39,10 +41,16 @@ local function get_system()
   end
 end
 
+---@return string|nil
 local function get_package()
-  return get_system() .. '-' .. get_machine()
+  local system = get_system()
+  local machine = get_machine()
+  if system and machine then
+    return system .. '-' .. machine
+  end
 end
 
+---@return string
 local function get_version()
   local file = io.open(script_path('../Cargo.toml'), 'r')
   if file ~= nil then
@@ -54,26 +62,50 @@ local function get_version()
     end
   end
 
-  return "0.0.0"
+  return '0.0.0'
 end
 
+---@return string|nil
 local function get_bin_name()
+  local package = get_package()
+  if not package then
+    return nil
+  end
   if get_system() == 'windows' then
-    return 'magento2-ls-' .. get_package() .. '.exe'
+    return 'magento2-ls-' .. package .. '.exe'
   else
-    return 'magento2-ls-' .. get_package()
+    return 'magento2-ls-' .. package
   end
 end
 
-local function get_bin_url()
+---@param bin_name string
+---@return string
+local function get_bin_url(bin_name)
   local base_url = 'https://github.com/pbogut/magento2-ls/releases/download/' .. get_version()
-  if get_system() == 'windows' then
-    return base_url .. '/' .. get_bin_name()
-  else
-    return base_url .. '/' .. get_bin_name()
-  end
+  return base_url .. '/' .. bin_name
 end
 
+---@param bin_url string
+local function download_server(bin_url)
+  local bin = destination .. '/magento2-ls'
+  if get_system() == 'windows' then
+    bin = bin .. '.exe'
+  end
+  vim.fn.mkdir(destination, 'p')
+  local cmd = 'curl -L -o ' .. bin .. ' ' .. bin_url
+  vim.fn.jobstart(cmd, {
+    on_exit = function(_, code)
+      if code == 0 then
+        vim.notify('Server download successful', vim.log.levels.INFO, { title = 'magento2-ls' })
+        if get_system() ~= 'windows' then
+          vim.fn.system('chmod +x ' .. bin)
+        end
+      else
+        vim.notify('Server download failed', vim.log.levels.ERROR, { title = 'magento2-ls' })
+      end
+    end,
+  })
+end
 
 M.setup = function(opts)
   opts = opts or {}
@@ -103,24 +135,27 @@ M.setup = function(opts)
 end
 
 M.get_server = function()
-  local bin = destination .. '/magento2-ls'
-  if get_system() == 'windows' then
-    bin = bin .. '.exe'
-  end
-  vim.fn.mkdir(destination, 'p')
-  local cmd = 'curl -L -o ' .. bin .. ' ' .. get_bin_url()
-  vim.fn.jobstart(cmd, {
-    on_exit = function(_, code)
-      if code == 0 then
-        vim.notify('Server download successful', vim.log.levels.INFO, { title = 'magento2-ls' })
-        if get_system() ~= 'windows' then
-          vim.fn.system('chmod +x ' .. bin)
-        end
-      else
-        vim.notify('Server download failed', vim.log.levels.ERROR, { title = 'magento2-ls' })
+  local bin_name = get_bin_name()
+  local bin_url = ''
+  if bin_name then
+    bin_url = get_bin_url(bin_name)
+    download_server(bin_url)
+  else
+    vim.ui.select({
+      'magento2-ls-darwin-arm64',
+      'magento2-ls-darwin-x64',
+      'magento2-ls-linux-x64',
+      'magento2-ls-windows-arm64.exe',
+      'magento2-ls-windows-x64.exe',
+    }, {
+      prompt = 'Select package for your system',
+    }, function(selected)
+      if selected then
+        bin_url = get_bin_url(selected)
+        download_server(bin_url)
       end
-    end,
-  })
+    end)
+  end
 end
 
 M.build = function()
